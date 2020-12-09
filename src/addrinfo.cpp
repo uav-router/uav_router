@@ -12,6 +12,24 @@ using namespace std::chrono_literals;
 #include "addrinfo.h"
 #include "timer.h"
 
+class AddrInfo : public IOPollable {
+public:
+    using callback_t = std::function<void(addrinfo*, std::error_code& ec)>;
+    AddrInfo();
+    ~AddrInfo();
+    void init(const std::string& name, const std::string& port="", 
+             int family = AF_UNSPEC, int socktype = 0, int protocol = 0, 
+             int flags = AI_V4MAPPED | AI_ADDRCONFIG);
+    void on_result_func(callback_t func);
+    error_c start_with(IOLoop* loop) override;
+    int epollIN() override;
+    void cleanup() override;
+private:
+    class AddrInfoImpl;
+    std::unique_ptr<AddrInfoImpl> _impl;
+};
+
+
 class AddrInfo::AddrInfoImpl {
 public:
     AddrInfoImpl() {
@@ -49,9 +67,10 @@ public:
     int _sfd;
     eai_code res;
     callback_t _on_result;
+    IOLoop* _loop;
 };
 
-AddrInfo::AddrInfo():_impl{new AddrInfoImpl{}} {}
+AddrInfo::AddrInfo():IOPollable("addrinfo"),_impl{new AddrInfoImpl{}} {}
 
 AddrInfo::~AddrInfo() {}
 
@@ -77,6 +96,7 @@ error_c AddrInfo::start_with(IOLoop* loop) {
     if (_impl->_sfd == -1) {
         return errno_c("signalfd");
     }
+    _impl->_loop = loop;
     ret = loop->add(_impl->_sfd, EPOLLIN, this);
     if (ret) {
         ret.add_place("IOLoop add");
@@ -96,41 +116,37 @@ error_c AddrInfo::start_with(IOLoop* loop) {
     return error_c();
 }
 
-void AddrInfo::events(IOLoop* loop, uint32_t evs) {
-    if (evs != EPOLLIN) {
-        log::warning()<<"AddrInfo->Unwaited event mask "<<evs<<std::endl;
-    }
-    if (evs & EPOLLIN) {
-        while(true) {
-            signalfd_siginfo fdsi;
-            ssize_t s = read(_impl->_sfd, &fdsi, sizeof(fdsi));
-            if (s==-1) {
-                errno_c err;
-                if (err == std::error_condition(std::errc::resource_unavailable_try_again)) break;
-                on_error(err,"events read");
-                break;
-            }
-            if (s != sizeof(fdsi)) {
-                log::error()<<"AddrInfo->Wrong read size "<<s<<std::endl;
-                continue;
-            }
-            if (fdsi.ssi_signo != SIGUSR1) {
-                log::error()<<"AddrInfo->Wrong signal no "<<fdsi.ssi_signo<<std::endl;
-                continue;
-            }
-            if (fdsi.ssi_code != SI_ASYNCNL) {
-                log::error()<<"AddrInfo->Wrong signal code "<<fdsi.ssi_code<<std::endl;
-                continue;
-            }
-            error_c ec = eai_code(&_impl->req);
-            _impl->on_result(_impl->req.ar_result, ec);
-            if (_impl->req.ar_result) { freeaddrinfo(_impl->req.ar_result);
-            }
-            loop->del(_impl->_sfd, this);
-            cleanup();
+int AddrInfo::epollIN() {
+    while(true) {
+        signalfd_siginfo fdsi;
+        ssize_t s = read(_impl->_sfd, &fdsi, sizeof(fdsi));
+        if (s==-1) {
+            errno_c err;
+            if (err == std::error_condition(std::errc::resource_unavailable_try_again)) break;
+            on_error(err,"events read");
             break;
         }
+        if (s != sizeof(fdsi)) {
+            log::error()<<"AddrInfo->Wrong read size "<<s<<std::endl;
+            continue;
+        }
+        if (fdsi.ssi_signo != SIGUSR1) {
+            log::error()<<"AddrInfo->Wrong signal no "<<fdsi.ssi_signo<<std::endl;
+            continue;
+        }
+        if (fdsi.ssi_code != SI_ASYNCNL) {
+            log::error()<<"AddrInfo->Wrong signal code "<<fdsi.ssi_code<<std::endl;
+            continue;
+        }
+        error_c ec = eai_code(&_impl->req);
+        _impl->on_result(_impl->req.ar_result, ec);
+        if (_impl->req.ar_result) { freeaddrinfo(_impl->req.ar_result);
+        }
+        _impl->_loop->del(_impl->_sfd, this);
+        cleanup();
+        break;
     }
+    return HANDLED;
 }
 
 void AddrInfo::cleanup() {
@@ -208,8 +224,8 @@ public:
 
 AddressResolver::AddressResolver():_impl{new AddressResolverImpl{}} {
     auto err = [this](error_c& ec){ on_error(ec,"AddressResolver"); };
-    _impl->_ai.on_error_func(err);
-    _impl->_timer.on_error_func(err);
+    _impl->_ai.on_error(err);
+    _impl->_timer.on_error(err);
 }
 AddressResolver::~AddressResolver() {}
 
@@ -221,6 +237,6 @@ void AddressResolver::init_resolving_server(int port, IOLoop* loop, const std::s
     _impl->init_resolving_server(port,loop,host_or_interface);
 }
 
-void AddressResolver::on_resolve_func(AddressResolver::callback_t func) {
+void AddressResolver::on_resolve(AddressResolver::callback_t func) {
     _impl->_on_resolve = func;
 }

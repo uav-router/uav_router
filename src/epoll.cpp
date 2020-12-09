@@ -143,8 +143,46 @@ int IOLoop::run() {
                     _impl->_stop=true;
                 }
             } else {
-                log::debug()<<"event"<<std::endl;
-                static_cast<IOPollable *>(events[i].data.ptr)->events(this, events[i].events);
+                IOPollable* obj = static_cast<IOPollable *>(events[i].data.ptr);
+                auto evs = events[i].events;
+                log::debug()<<obj->name<<" event "<<evs<<std::endl;
+                if (obj->epollEvent(evs)) continue;
+                if (evs & EPOLLIN) {
+                    log::debug()<<"EPOLLIN"<<std::endl;
+                    int ret = obj->epollIN();
+                    if (ret==IOPollable::NOT_HANDLED) log::warning()<<obj->name<<" EPOLLIN not handled"<<std::endl;
+                    if (ret==IOPollable::STOP) continue;
+                }
+                if (evs & EPOLLOUT) {
+                    log::debug()<<"EPOLLOUT"<<std::endl;
+                    int ret = obj->epollOUT();
+                    if (ret==IOPollable::NOT_HANDLED) log::warning()<<obj->name<<" EPOLLOUT not handled"<<std::endl;
+                    if (ret==IOPollable::STOP) continue;
+                }
+                if (evs & EPOLLPRI) {
+                    log::debug()<<"EPOLLPRI"<<std::endl;
+                    int ret = obj->epollPRI();
+                    if (ret==IOPollable::NOT_HANDLED) log::warning()<<obj->name<<" EPOLLPRI not handled"<<std::endl;
+                    if (ret==IOPollable::STOP) continue;
+                }
+                if (evs & EPOLLERR) {
+                    log::debug()<<"EPOLLERR"<<std::endl;
+                    int ret = obj->epollERR();
+                    if (ret==IOPollable::NOT_HANDLED) log::warning()<<obj->name<<" EPOLLERR not handled"<<std::endl;
+                    if (ret==IOPollable::STOP) continue;
+                }
+                if (evs & EPOLLHUP) {
+                    log::debug()<<"EPOLLHUP"<<std::endl;
+                    int ret = obj->epollHUP();
+                    if (ret==IOPollable::NOT_HANDLED) log::warning()<<obj->name<<" EPOLLHUP not handled"<<std::endl;
+                    if (ret==IOPollable::STOP) continue;
+                }
+                if (evs & EPOLLRDHUP) {
+                    log::debug()<<"EPOLLRDHUP"<<std::endl;
+                    int ret = obj->epollRDHUP();
+                    if (ret==IOPollable::NOT_HANDLED) log::warning()<<obj->name<<" EPOLLRDHUP not handled"<<std::endl;
+                    if (ret==IOPollable::STOP) continue;
+                }
             }
         }
     }

@@ -44,7 +44,7 @@ inline void eai_check(const eai_code& ret, const std::string& from) {
 class error_handler {
 public:
     using callback_t = std::function<void(error_c&)>;
-    inline void on_error_func(callback_t func) { _on_error = func;
+    inline void on_error(callback_t func) { _on_error = func;
     }
 protected:
     bool on_error(error_c& ec, const std::string& place = "");

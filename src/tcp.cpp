@@ -12,6 +12,7 @@
 
 class TcpClientBase : public IOPollable, public IOWriteable {
 public:
+    TcpClientBase():IOPollable("tcp client") {}
     void init(socklen_t addrlen, sockaddr *addr) {
         _addrlen = addrlen;
         memcpy(&_addr,addr,_addrlen);
@@ -58,81 +59,64 @@ public:
         return errno_c(ec,"socket error");
     }
 
-    void events(IOLoop* loop, uint32_t evs) override {
-        log::debug()<<"tcp event "<<evs<<std::endl;
-        if (evs & EPOLLIN) {
-            evs &= ~EPOLLIN;
-            log::debug()<<"EPOLLIN"<<std::endl;
-            errno_c ret = check();
-            if (ret) {    on_error(ret);
-            } else while(true) {
-                int sz;
-                ret = err_chk(ioctl(_fd, FIONREAD, &sz),"udp ioctl");
-                if (ret) {
-                    on_error(ret, "Query datagram size error");
+    int epollIN() override {
+        errno_c ret = check();
+        if (ret) {    on_error(ret);
+        } else while(true) {
+            int sz;
+            ret = err_chk(ioctl(_fd, FIONREAD, &sz),"tcp ioctl");
+            if (ret) {
+                on_error(ret, "Query datagram size error");
+            } else {
+                if (sz==0) {
+                    log::debug()<<"nothing to read"<<std::endl;
+                    break;
+                }
+                void* buffer = alloca(sz);
+                ssize_t n = recv(_fd, buffer, sz, 0);
+                if (n<0) {
+                    errno_c ret;
+                    if (ret != std::error_condition(std::errc::resource_unavailable_try_again)) {
+                        on_error(ret, "udp recvfrom");
+                    }
                 } else {
-                    if (sz==0) {
-                        log::debug()<<"nothing to read"<<std::endl;
-                        break;
+                    if (n != sz) {
+                        log::warning()<<"Datagram declared size "<<sz<<" is differ than read "<<n<<std::endl;
                     }
-                    void* buffer = alloca(sz);
-                    ssize_t n = recv(_fd, buffer, sz, 0);
-                    if (n<0) {
-                        errno_c ret;
-                        if (ret != std::error_condition(std::errc::resource_unavailable_try_again)) {
-                            on_error(ret, "udp recvfrom");
-                        }
-                    } else {
-                        if (n != sz) {
-                            log::warning()<<"Datagram declared size "<<sz<<" is differ than read "<<n<<std::endl;
-                        }
-                        log::debug()<<"on_read"<<std::endl;
-                        if (_on_read) _on_read(buffer, n);
-                    }
+                    log::debug()<<"on_read"<<std::endl;
+                    if (_on_read) _on_read(buffer, n);
                 }
             }
         }
-        if (evs & EPOLLOUT) {
-            log::debug()<<"EPOLLOUT"<<std::endl;
-            evs &= ~EPOLLOUT;
-            is_writeable = true;
-            if (!is_connected) {
-                if (_on_connect) _on_connect();
-                is_connected=true;
-            }
-            
-        }
-        if (evs & EPOLLRDHUP) {
-            log::debug()<<"EPOLLRDHUP"<<std::endl;
-            evs &= ~EPOLLRDHUP;
-            //errno_c ret = err_chk(shutdown(_fd,SHUT_WR),"shutdown");
-            //if (ret) { on_error(ret,"tcp event");
-            //}
-            error_c ret = loop->del(_fd, this);
-            if (ret) { on_error(ret,"tcp event");
-            }
-            if (_on_close) _on_close();
-            cleanup();
-        }
-        if (evs & EPOLLHUP) {
-            evs &= ~EPOLLHUP;
-            log::debug()<<"EPOLLHUP"<<std::endl;
-            error_c ret = loop->del(_fd, this);
-            if (ret) { on_error(ret,"tcp event");
-            }
-            if (_on_close) _on_close();
-            cleanup();
-        }
-        if (evs & EPOLLERR) {
-            log::debug()<<"EPOLLERR"<<std::endl;
-            evs &= ~EPOLLERR;
-            errno_c ret = check();
-            on_error(ret,"sock error");
-        }
-        if (evs) {
-            log::warning()<<"TCP unexpected event "<<evs<<std::endl;
-        }
+        return HANDLED;
     }
+
+    int epollOUT() override {
+        is_writeable = true;
+        if (!is_connected) {
+            if (_on_connect) _on_connect();
+            is_connected=true;
+        }
+        return HANDLED;
+    }
+
+    int epollRDHUP() override {
+        error_c ret = _loop->del(_fd, this);
+        if (ret) { on_error(ret,"tcp event");
+        }
+        if (_on_close) _on_close();
+        cleanup();
+        return HANDLED;
+    }
+
+    int epollHUP() override { return epollRDHUP(); }
+
+    int epollERR() override {
+        errno_c ret = check();
+        on_error(ret,"sock error");
+        return HANDLED;
+    }
+
     error_c start_with(IOLoop* loop) override {
         _fd = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0);
         if (_fd == -1) { return errno_c("tcp client socket");
@@ -154,6 +138,7 @@ public:
             close(_fd);
             return ret;
         }
+        _loop = loop;
         return loop->add(_fd, EPOLLIN | EPOLLOUT | EPOLLRDHUP | EPOLLET, this);
     }
 private:
@@ -165,6 +150,7 @@ private:
     OnReadFunc _on_read;
     OnEventFunc _on_close;
     OnEventFunc _on_connect;
+    IOLoop* _loop;
 };
 
 
@@ -173,9 +159,9 @@ public:
     TcpClientImpl(const std::string& name):_name(name) {}
     void init(const std::string& host, int port, IOLoop* loop) {
         auto on_err = [this](error_c& ec){ on_error(ec,_name);};
-        _tcp.on_error_func(on_err);
-        _addr_resolver.on_error_func(on_err);
-        _addr_resolver.on_resolve_func([this](addrinfo* ai) {
+        _tcp.on_error(on_err);
+        _addr_resolver.on_error(on_err);
+        _addr_resolver.on_resolve([this](addrinfo* ai) {
             _tcp.init(ai->ai_addrlen, ai->ai_addr);
             error_c ret = _loop->execute(&_tcp);
             if (ret) { on_error(ret,_name);
@@ -191,7 +177,7 @@ public:
 };
 
 TcpClient::TcpClient(const std::string& name):_impl{new TcpClientImpl{name}} {
-    _impl->on_error_func([this](error_c& ec){ on_error(ec,"tcp client");});
+    _impl->on_error([this](error_c& ec){ on_error(ec,"tcp client");});
 }
 TcpClient::~TcpClient() {}
 void TcpClient::on_read_func(OnReadFunc func) {

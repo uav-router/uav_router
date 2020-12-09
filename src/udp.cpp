@@ -1,5 +1,5 @@
 #include <unistd.h>
-#include <fcntl.h>
+//#include <fcntl.h>
 #include <string.h>
 #include <sys/epoll.h>
 #include <sys/ioctl.h>
@@ -15,6 +15,7 @@
 
 class UdpBase : public IOPollable, IOWriteable {
 public:
+    UdpBase(const std::string n):IOPollable(n) {}
     void init(socklen_t addrlen, sockaddr *addr) {
         _addrlen = addrlen;
         memcpy(&_addr,addr,_addrlen);
@@ -25,46 +26,39 @@ public:
     void cleanup() override {
         if (_fd != -1) close(_fd);
     }
-    void events(IOLoop* loop, uint32_t evs) override {
-        log::debug()<<"udp event "<<evs<<std::endl;
-        if (evs & EPOLLIN) {
-            evs &= ~EPOLLIN;
-            log::debug()<<"read event"<<std::endl;
-            while(true) {
-                int sz;
-                errno_c ret = err_chk(ioctl(_fd, FIONREAD, &sz),"udp ioctl");
-                if (ret) {
-                    on_error(ret, "Query datagram size error");
+    int epollIN() override {
+        while(true) {
+            int sz;
+            errno_c ret = err_chk(ioctl(_fd, FIONREAD, &sz),"udp ioctl");
+            if (ret) {
+                on_error(ret, "Query datagram size error");
+            } else {
+                if (sz==0) { 
+                    break;
+                }
+                void* buffer = alloca(sz);
+                _send_addrlen = sizeof(_send_addr);
+                ssize_t n = recvfrom(_fd, buffer, sz, 0, (sockaddr*)&_send_addr, &_send_addrlen);
+                if (n<0) {
+                    errno_c ret;
+                    if (ret != std::error_condition(std::errc::resource_unavailable_try_again)) {
+                        on_error(ret, "udp recvfrom");
+                    }
+                    _send_addrlen = 0;
                 } else {
-                    if (sz==0) { 
-                        break;
+                    if (n != sz) {
+                        log::warning()<<"Datagram declared size "<<sz<<" is differ than read "<<n<<std::endl;
                     }
-                    void* buffer = alloca(sz);
-                    _send_addrlen = sizeof(_send_addr);
-                    ssize_t n = recvfrom(_fd, buffer, sz, 0, (sockaddr*)&_send_addr, &_send_addrlen);
-                    if (n<0) {
-                        errno_c ret;
-                        if (ret != std::error_condition(std::errc::resource_unavailable_try_again)) {
-                            on_error(ret, "udp recvfrom");
-                        }
-                        _send_addrlen = 0;
-                    } else {
-                        if (n != sz) {
-                            log::warning()<<"Datagram declared size "<<sz<<" is differ than read "<<n<<std::endl;
-                        }
-                        log::debug()<<"on_read"<<std::endl;
-                        if (_on_read) _on_read(buffer, n);
-                    }
+                    log::debug()<<"on_read"<<std::endl;
+                    if (_on_read) _on_read(buffer, n);
                 }
             }
         }
-        if (evs & EPOLLOUT) {
-            evs &= ~EPOLLOUT;
-            is_writeable = true;
-        }
-        if (evs) {
-            log::warning()<<"UDP unexpected event "<<evs<<std::endl;
-        }
+        return HANDLED;
+    }
+    int epollOUT() override {
+        is_writeable = true;
+        return HANDLED;
     }
 protected:
 
@@ -94,6 +88,7 @@ protected:
 
 class UdpClientBase : public UdpBase {
 public:
+    UdpClientBase():UdpBase("udp client") {}
     virtual error_c start_with(IOLoop* loop) override {
         _fd = socket(AF_INET, SOCK_DGRAM | SOCK_NONBLOCK, 0);
         if (_fd == -1) { return errno_c("udp client socket");
@@ -108,6 +103,7 @@ public:
 
 class UdpServerBase : public UdpBase {
 public:
+    UdpServerBase():UdpBase("udp server") {}
     virtual error_c start_with(IOLoop* loop) override {
         _fd = socket(AF_INET, SOCK_DGRAM | SOCK_NONBLOCK, 0);
         if (_fd == -1) { return errno_c("udp server socket");
@@ -134,9 +130,9 @@ public:
     
     void init(const std::string& host, int port, IOLoop* loop) {
         auto on_err = [this](error_c& ec){ on_error(ec,_name);};
-        _udp.on_error_func(on_err);
-        _addr_resolver.on_error_func(on_err);
-        _addr_resolver.on_resolve_func([this](addrinfo* ai) {
+        _udp.on_error(on_err);
+        _addr_resolver.on_error(on_err);
+        _addr_resolver.on_resolve([this](addrinfo* ai) {
             _udp.init(ai->ai_addrlen, ai->ai_addr);
             error_c ret = _loop->execute(&_udp);
             if (ret) { on_error(ret,_name);
@@ -160,7 +156,7 @@ public:
 };
 
 UdpClient::UdpClient(const std::string& name):_impl{new UdpClientImpl{name}} {
-    _impl->on_error_func([this](error_c& ec){ on_error(ec,"udp client");});
+    _impl->on_error([this](error_c& ec){ on_error(ec,"udp client");});
 }
 UdpClient::~UdpClient() {}
 
@@ -186,9 +182,9 @@ public:
     void init(int port, IOLoop* loop, const std::string& host_or_interface="") {
         _loop = loop;
         auto on_err = [this](error_c& ec){ on_error(ec,_name);};
-        _udp.on_error_func(on_err);
-        _addr_resolver.on_error_func(on_err);
-        _addr_resolver.on_resolve_func([this](addrinfo* ai) {
+        _udp.on_error(on_err);
+        _addr_resolver.on_error(on_err);
+        _addr_resolver.on_resolve([this](addrinfo* ai) {
             _udp.init(ai->ai_addrlen, ai->ai_addr);
             error_c ret = _loop->execute(&_udp);
             if (ret) { on_error(ret,"udp client");
@@ -212,7 +208,7 @@ public:
 };
 
 UdpServer::UdpServer(const std::string& name): _impl{new UdpServerImpl{name}} {
-    _impl->on_error_func([this](error_c& ec){ on_error(ec,"udp server");});
+    _impl->on_error([this](error_c& ec){ on_error(ec,"udp server");});
 }
 UdpServer::~UdpServer() {};
 void UdpServer::on_read_func(OnReadFunc func) {

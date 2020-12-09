@@ -12,7 +12,7 @@ public:
     void init_oneshoot(std::chrono::nanoseconds timeout);
     void init(int clockid, const itimerspec * value, int flags);
     void on_shoot_func(OnEventFunc func);
-    void events(IOLoop* loop, uint32_t evs) override;
+    int epollIN() override;
     error_c start_with(IOLoop* loop) override;
     void cleanup() override;
 private:

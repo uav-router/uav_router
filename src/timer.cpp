@@ -33,10 +33,11 @@ public:
     int _flags;
     uint64_t _result=0;
     OnEventFunc _on_shoot;
+    IOLoop* _loop;
 };
 
 
-Timer::Timer():_impl{new TimerImpl{}} {}
+Timer::Timer():IOPollable("timer"),_impl{new TimerImpl{}} {}
 Timer::~Timer() {}
 
 void Timer::init_periodic(std::chrono::nanoseconds timeout) {
@@ -52,23 +53,19 @@ void Timer::on_shoot_func(OnEventFunc func) {
     _impl->_on_shoot = func;
 }
 
-void Timer::events(IOLoop* loop, uint32_t evs) {
-    if (evs != EPOLLIN) {
-        log::warning()<<"Unexpected events value "<<evs<<std::endl;
-    }
-    if (evs & EPOLLIN) {
-        int ret = read(_impl->_fd, &_impl->_result, sizeof(_impl->_result));
-        if (ret!=sizeof(_impl->_result)) {
-            errno_c err;
-            on_error(err,"Wrong timerfd read");
-        } else {
-            if (_impl->_on_shoot) _impl->_on_shoot();
-            if (!(_impl->_ts.it_interval.tv_sec || _impl->_ts.it_interval.tv_nsec )) {
-                loop->del(_impl->_fd, this);
-                cleanup();
-            }
+int Timer::epollIN() {
+    int ret = read(_impl->_fd, &_impl->_result, sizeof(_impl->_result));
+    if (ret!=sizeof(_impl->_result)) {
+        errno_c err;
+        on_error(err,"Wrong timerfd read");
+    } else {
+        if (_impl->_on_shoot) _impl->_on_shoot();
+        if (!(_impl->_ts.it_interval.tv_sec || _impl->_ts.it_interval.tv_nsec )) {
+            _impl->_loop->del(_impl->_fd, this);
+            cleanup();
         }
     }
+    return HANDLED;
 }
 error_c Timer::start_with(IOLoop* loop) {
     _impl->_fd = timerfd_create(_impl->_clockid, TFD_NONBLOCK);
@@ -81,6 +78,7 @@ error_c Timer::start_with(IOLoop* loop) {
         ret.add_place("timerfd_settime");
         return ret;
     }
+    _impl->_loop = loop;
     return loop->add(_impl->_fd, EPOLLIN, this);
 }
 void Timer::cleanup() {

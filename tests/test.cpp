@@ -57,7 +57,7 @@ void addr_info_result(addrinfo* addr, const std::error_code& res) {
     }
 }
 
-int addrinfo_test() {
+/*int addrinfo_test() {
     AddrInfo request;
     //request.init("localhost","2020",AF_INET,SOCK_DGRAM,IPPROTO_UDP);
     request.init("localhost","2020",0,0,0,AI_PASSIVE | AI_CANONNAME);
@@ -66,7 +66,7 @@ int addrinfo_test() {
     request.on_result_func(addr_info_result);
     loop.run();
     return 0;
-}
+}*/
 
 int timer_test() {
     Timer request;
@@ -102,10 +102,12 @@ int timer_test() {
 }*/
 
 #include <sys/epoll.h>
+#include <fcntl.h>
 
 class TcpServerBase : public IOPollable {
 public:
     using OnConnectFunc = std::function<void(int, sockaddr*, socklen_t)>;
+    TcpServerBase():IOPollable("tcp server") {}
     void init(socklen_t addrlen, sockaddr *addr) {
         _addrlen = addrlen;
         memcpy(&_addr,addr,_addrlen);
@@ -131,39 +133,54 @@ public:
         if (ret) return ret;
         return errno_c(ec,"socket error");
     }
-
-    void events(IOLoop* loop, uint32_t evs) override {
-        log::debug()<<"tcp event "<<evs<<std::endl;
-        if (evs & EPOLLIN) {
-            evs &= ~EPOLLIN;
-            log::debug()<<"EPOLLIN"<<std::endl;
-            errno_c ret = check();
-            if (ret) { on_error(ret);
-            } else while(true) {
-                sockaddr_in client_addr;
-                socklen_t ca_len = sizeof(client_addr);
-                int client = accept(_fd, (sockaddr *) &client_addr, &ca_len);
-                if (client==-1) {
-                    errno_c ret("accept");
-                    if (ret!=std::error_condition(std::errc::resource_unavailable_try_again) &&
-                        ret!=std::error_condition(std::errc::operation_would_block)) {
-                            on_error(ret);
-                    }
-                } else {
-                    on_connect(client, (struct sockaddr *) &client_addr, ca_len);
+    int epollIN() override {
+        errno_c ret = check();
+        if (ret) { on_error(ret);
+        } else while(true) {
+            sockaddr_in client_addr;
+            socklen_t ca_len = sizeof(client_addr);
+            //log::debug()<<"before accept"<<std::endl;
+            int client = accept(_fd, (sockaddr *) &client_addr, &ca_len);
+            //log::debug()<<"after accept "<<client<<std::endl;
+            if (client==-1) {
+                errno_c ret("accept");
+                if (ret!=std::error_condition(std::errc::resource_unavailable_try_again) &&
+                    ret!=std::error_condition(std::errc::operation_would_block)) {
+                        on_error(ret);
                 }
+                break;
+            } else {
+                int yes = 1;
+                errno_c ret = err_chk(setsockopt(client,SOL_SOCKET,SO_KEEPALIVE,&yes,sizeof(yes)),"keepalive");
+                if (ret) {
+                    on_error(ret);
+                    close(client);
+                    break;
+                }
+                int flags = fcntl(client, F_GETFL);
+                if (flags == -1) {
+                    errno_c ret("fcntl getfl");
+                    on_error(ret);
+                    close(client);
+                    break;
+                }
+                ret = fcntl(client, F_SETFL, flags | O_NONBLOCK);
+                if (ret) {
+                    on_error(ret,"fcntl setfl");
+                    close(client);
+                    break;
+                }
+                on_connect(client, (struct sockaddr *) &client_addr, ca_len);
             }
         }
-        if (evs & EPOLLERR) {
-            log::debug()<<"EPOLLERR"<<std::endl;
-            evs &= ~EPOLLERR;
-            errno_c ret = check();
-            on_error(ret,"sock error");
-        }
-        if (evs) {
-            log::warning()<<"TCP unexpected event "<<evs<<std::endl;
-        }
+        return HANDLED;
     }
+    int epollERR() override {
+        errno_c ret = check();
+        on_error(ret,"sock error");
+        return HANDLED;
+    }
+
     error_c start_with(IOLoop* loop) override {
         _fd = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0);
         if (_fd == -1) { return errno_c("tcp server socket");
@@ -175,12 +192,7 @@ public:
             close(_fd);
             return ret;
         }*/
-        errno_c ret = err_chk(setsockopt(_fd,SOL_SOCKET,SO_KEEPALIVE,&yes,sizeof(yes)),"keepalive");
-        if (ret) {
-            close(_fd);
-            return ret;
-        }
-        ret = err_chk(bind(_fd,(sockaddr*)&_addr, _addrlen),"connect");
+        errno_c ret = err_chk(bind(_fd,(sockaddr*)&_addr, _addrlen),"connect");
         if (ret) { // && ret!=std::error_condition(std::errc::operation_in_progress)) {
             close(_fd);
             return ret;
@@ -216,8 +228,19 @@ private:
 
 class TcpSocket : public IOPollable, public IOWriteable {
 public:
+    TcpSocket():IOPollable("tcp socket") {}
+    TcpSocket(int fd):IOPollable("tcp socket"),_fd(fd) {}
+    ~TcpSocket() {
+        log::debug()<<"Destroy TcpSocket"<<std::endl;
+    }
     void init(int fd) {
         _fd = fd;
+    }
+    void on_read_func(OnReadFunc func) {
+        _on_read = func;
+    }
+    void on_close_func(OnEventFunc func) {
+        _on_close = func;
     }
     errno_c check() {
         int ec;
@@ -226,63 +249,58 @@ public:
         if (ret) return ret;
         return errno_c(ec,"socket error");
     }
-    void events(IOLoop* loop, uint32_t evs) override {
-        log::debug()<<"tcp socket event "<<evs<<std::endl;
-        errno_c err = check();
-        if (err) {
-            on_error(err,"socket error");
-        }
-        if (evs & EPOLLIN) {
-            evs &= ~EPOLLIN;
-            log::debug()<<"EPOLLIN"<<std::endl;
-            while(true) {
-                int sz;
-                errno_c ret = err_chk(ioctl(_fd, FIONREAD, &sz),"tcp ioctl");
-                if (ret) {
-                    on_error(ret, "Query data size error");
+    int epollIN() override {
+        while(true) {
+            int sz;
+            errno_c ret = err_chk(ioctl(_fd, FIONREAD, &sz),"tcp ioctl");
+            if (ret) {
+                on_error(ret, "Query data size error");
+            } else {
+                if (sz==0) { 
+                    _loop->del(_fd,this);
+                    cleanup();
+                    if (_on_close) _on_close();
+                    return STOP;
+                }
+                void* buffer = alloca(sz);
+                int n = recv(_fd, buffer, sz, 0);
+                if (n == -1) {
+                    errno_c ret;
+                    if (ret != std::error_condition(std::errc::resource_unavailable_try_again)) {
+                        on_error(ret, "tcp recv");
+                    }
                 } else {
-                    if (sz==0) { 
-                        break;
+                    if (n != sz) {
+                        log::warning()<<"Datagram declared size "<<sz<<" is differ than read "<<n<<std::endl;
                     }
-                    void* buffer = alloca(sz);
-                    int n = recv(_fd, buffer, sz, 0);
-                    if (n == -1) {
-                        errno_c ret;
-                        if (ret != std::error_condition(std::errc::resource_unavailable_try_again)) {
-                            on_error(ret, "tcp recv");
-                        }
-                    } else {
-                        if (n != sz) {
-                            log::warning()<<"Datagram declared size "<<sz<<" is differ than read "<<n<<std::endl;
-                        }
-                        log::debug()<<"on_read"<<std::endl;
-                        if (_on_read) _on_read(buffer, n);
-                    }
+                    log::debug()<<"on_read"<<std::endl;
+                    if (_on_read) _on_read(buffer, n);
                 }
             }
         }
-        if (evs & EPOLLOUT) {
-            evs &= ~EPOLLOUT;
-            log::debug()<<"EPOLLOUT"<<std::endl;
-            _is_writeable = true;
+        return HANDLED;
+    }
+    int epollOUT() override {
+        _is_writeable = true;
+        return HANDLED;
+    }
+    int epollERR() override {
+        return HANDLED;
+    }
+    int epollHUP() override {
+        error_c ret = _loop->del(_fd, this);
+        if (ret) on_error(ret, "loop del");
+        cleanup();
+        if (_on_close) { _on_close();
         }
-        if (evs & EPOLLERR) {
-            evs &= ~EPOLLERR;
-            log::debug()<<"EPOLLERR"<<std::endl;
-            on_error(err,"socket error");
+        return HANDLED;
+    }
+    bool epollEvent(int events) {
+        if (events & (EPOLLIN | EPOLLERR)) {
+            errno_c err = check();
+            if (err || (events & EPOLLERR)) on_error(err,"tcp socket error");
         }
-        if (evs & EPOLLHUP) {
-            evs &= ~EPOLLHUP;
-            log::debug()<<"EPOLLHUP"<<std::endl;
-            if (_on_close) { _on_close();
-            }
-            error_c ret = _loop->del(_fd, this);
-            if (ret) on_error(ret, "loop del");
-            cleanup();
-        }
-        if (evs) {
-            log::warning()<<"TCP socket unexpected event "<<evs<<std::endl;
-        }
+        return false;
     }
     error_c start_with(IOLoop* loop) override {
         _loop = loop;
@@ -303,6 +321,7 @@ public:
                 on_error(ret, "tcp send");
             }
         }
+        return n;
     }
 private:
     int _fd = -1;
@@ -328,6 +347,41 @@ private:
     loop.run();
     return 0;
 }*/
+#include <map>
+
+int tcp_server_base_test() {
+    IOLoop loop;
+    TcpServerBase tcp;
+    std::map<int, std::unique_ptr<TcpSocket>> sockets;
+    struct sockaddr_in servaddr;
+    memset(&servaddr, 0, sizeof(servaddr));
+    servaddr.sin_family    = AF_INET; // IPv4 
+    servaddr.sin_addr.s_addr = INADDR_ANY; //"192.168.0.25",10000
+    servaddr.sin_port = htons(10000);
+    tcp.init(sizeof(servaddr), (sockaddr*)&servaddr);
+    tcp.on_connect_func([&loop, &sockets](int fd, sockaddr* addr, socklen_t len){
+        print_addr(addr,len);
+        sockets[fd] = std::unique_ptr<TcpSocket>(new TcpSocket(fd));
+        sockets[fd]->start_with(&loop);
+        sockets[fd]->write("Hello!",6);
+        sockets[fd]->on_read_func([](void* buf, int len){
+            std::cout.write((char*)buf,len);
+            std::cout<<std::endl;
+        });
+        sockets[fd]->on_close_func([fd, &sockets](){
+            std::cout<<"Tcp socket closed "<<sockets.size()<<std::endl;
+            sockets.erase(fd);
+            std::cout<<"Tcp socket closed end "<<sockets.size()<<std::endl;
+        });
+        sockets[fd]->on_error([](const error_c& ec) {
+            std::cout<<"Tcp socket error:"<<ec.place()<<": "<<ec.message()<<std::endl;
+        });
+    });
+    loop.execute(&tcp);
+    loop.run();
+    return 0;
+}
+
 
 int udp_client_test() {
     IOLoop loop;
@@ -340,7 +394,7 @@ int udp_client_test() {
     udp.on_connect_func([&udp]() {
         std::cout<<"on connect "<<udp.write("Hello!", 6)<<std::endl;
     });
-    udp.on_error_func([&udp](const error_c& ec) {
+    udp.on_error([](const error_c& ec) {
         std::cout<<"Udp socket error:"<<ec.place()<<": "<<ec.message()<<std::endl;
     });
     loop.run();
@@ -357,18 +411,19 @@ int udp_server_test() {
         const char* answ = "Hello from server!";
         udp.write(answ, strlen(answ));
     });
-    udp.on_error_func([&udp](const error_c& ec) {
+    udp.on_error([&udp](const error_c& ec) {
         std::cout<<"Udp socket error:"<<ec.place()<<": "<<ec.message()<<std::endl;
     });
     loop.run();
     return 0;
 }
 
+
 int tcp_client_test() {
     IOLoop loop;
     TcpClient tcp("MyEndpoint");
     tcp.init("192.168.0.25",10000,&loop);
-    tcp.on_error_func([&tcp](const error_c& ec) {
+    tcp.on_error([&tcp](const error_c& ec) {
         std::cout<<"Tcp socket error:"<<ec.place()<<": "<<ec.message()<<std::endl;
     });
     tcp.on_read_func([](void* buf, int len) {
@@ -409,7 +464,7 @@ int tcp_client_test() {
             socket.on_close_func([]() {
                 std::cout<<"socket disconnected"<<std::endl;
             });
-            socket.on_error_func([](error_c& err){
+            socket.on_error([](error_c& err){
                 std::cout<<"Error:"<<err.place()<<" "<<err.message()<<std::endl;
             });
         }
@@ -508,8 +563,9 @@ int main() {
     //return udp_client_base_test();
     //return test_if_address();
     //return udp_client_test();
-    return tcp_client_test();
+    //return tcp_client_test();
     //return udp_server_test();
     //return udp_server_base_test();
     //return test_tcp_client_base();
+    return tcp_server_base_test();
 }

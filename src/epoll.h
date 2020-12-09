@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include <memory>
 #include <functional>
+#include <string>
 #include "err.h"
 
 
@@ -15,10 +16,24 @@ public:
 
 class IOPollable :  public error_handler {
 public:
+    enum {
+        NOT_HANDLED = 0,
+        HANDLED,
+        STOP
+    };
+    IOPollable(const std::string& n):name(n) {}
     virtual ~IOPollable() {}
-    virtual void events(IOLoop* loop, uint32_t evs) = 0;
-    virtual error_c start_with(IOLoop* loop) {return error_c(0);}
+    virtual bool epollEvent(int /*event*/) { return false; }
+    virtual int epollIN() { return NOT_HANDLED; }
+    virtual int epollOUT() { return NOT_HANDLED; }
+    virtual int epollPRI() { return NOT_HANDLED; }
+    virtual int epollERR() { return NOT_HANDLED; }
+    virtual int epollRDHUP() { return NOT_HANDLED; }
+    virtual int epollHUP() { return NOT_HANDLED; }
+    virtual error_c start_with(IOLoop* loop) {return error_c(ENOTSUP);}
     virtual void cleanup() {}
+
+    std::string name;
 };
 
 class IOLoop {

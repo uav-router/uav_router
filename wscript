@@ -13,7 +13,7 @@ def options(opt):
 
 def configure(conf):
     conf.load('compiler_cxx')
-
+    conf.env.CPPFLAGS = ['-g']
 def build(bld):
     bld.program(
         source=[

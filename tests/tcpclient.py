@@ -28,10 +28,12 @@ try:
     amount_received = 0
     amount_expected = all
     #input("Press Enter to read...")
-    while amount_received < amount_expected:
-        data = sock.recv(1024)
-        amount_received += len(data)
-        print >>sys.stderr, 'received "%s"' % data
+    #while amount_received < amount_expected:
+    #    data = sock.recv(1024)
+    #    amount_received += len(data)
+    #    print >>sys.stderr, 'received "%s"' % data
+    data = sock.recv(1024)
+    print >>sys.stderr, 'received "%s"' % data
 
 finally:
     print >>sys.stderr, 'closing socket'
