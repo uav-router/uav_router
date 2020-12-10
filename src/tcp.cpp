@@ -18,13 +18,13 @@ public:
         _addrlen = addrlen;
         memcpy(&_addr,addr,_addrlen);
     }
-    void on_read_func(OnReadFunc func) {
+    void on_read(OnReadFunc func) {
         _on_read = func;
     }
-    void on_connect_func(OnEventFunc func) {
+    void on_connect(OnEventFunc func) {
         _on_connect = func;
     }
-    void on_close_func(OnEventFunc func) {
+    void on_close(OnEventFunc func) {
         _on_close = func;
     }
     void cleanup() override {
@@ -155,10 +155,10 @@ private:
 };
 
 
-class TcpClient::TcpClientImpl : public error_handler {
+class TcpClientImpl : public TcpClient {
 public:
     TcpClientImpl(const std::string& name):_name(name) {}
-    void init(const std::string& host, int port, IOLoop* loop) {
+    void init(const std::string& host, int port, IOLoop* loop) override {
         auto on_err = [this](error_c& ec){ on_error(ec,_name);};
         _tcp.on_error(on_err);
         _addr_resolver.on_error(on_err);
@@ -171,32 +171,31 @@ public:
         _addr_resolver.init_resolving_client(host,port,loop);
         _loop = loop;
     }
+    void on_read(OnReadFunc func) override {
+        _tcp.on_read(func);
+    }
+
+    void on_connect(OnEventFunc func) override {
+        _tcp.on_connect(func);
+    }
+
+    void on_close(OnEventFunc func) override {
+        _tcp.on_close(func);
+    }
+
+    int write(const void* buf, int len) override {
+        return _tcp.write(buf,len);
+    }
+
     std::string _name;
     IOLoop *_loop;
     TcpClientBase _tcp;
     AddressResolver _addr_resolver;
 };
 
-TcpClient::TcpClient(const std::string& name):_impl{new TcpClientImpl{name}} {
-    _impl->on_error([this](error_c& ec){ on_error(ec,"tcp client");});
+std::unique_ptr<TcpClient> TcpClient::create(const std::string& name) {
+    return std::unique_ptr<TcpClient>{new TcpClientImpl(name)};
 }
-TcpClient::~TcpClient() {}
-void TcpClient::on_read_func(OnReadFunc func) {
-    _impl->_tcp.on_read_func(func);
-}
-void TcpClient::on_connect_func(OnEventFunc func) {
-    _impl->_tcp.on_connect_func(func);
-}
-void TcpClient::on_close_func(OnEventFunc func) {
-    _impl->_tcp.on_close_func(func);
-}
-void TcpClient::init(const std::string& host, int port, IOLoop* loop) {
-    _impl->init(host,port,loop);
-}
-int TcpClient::write(const void* buf, int len) {
-    return _impl->_tcp.write(buf,len);
-}
-
 
 class TcpSocketImpl : public IOPollable, public TcpSocket {
 public:

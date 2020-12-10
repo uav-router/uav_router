@@ -225,25 +225,84 @@ int udp_server_test() {
 
 int tcp_client_test() {
     IOLoop loop;
-    TcpClient tcp("MyEndpoint");
-    tcp.init("192.168.0.25",10000,&loop);
-    tcp.on_error([&tcp](const error_c& ec) {
+    std::unique_ptr<TcpClient> tcp = TcpClient::create("MyEndpoint");
+    tcp->init("192.168.0.25",10000,&loop);
+    tcp->on_error([&tcp](const error_c& ec) {
         std::cout<<"Tcp socket error:"<<ec.place()<<": "<<ec.message()<<std::endl;
     });
-    tcp.on_read_func([](void* buf, int len) {
+    tcp->on_read([](void* buf, int len) {
         std::cout.write((char*)buf,len);
         std::cout<<std::endl;
     });
-    tcp.on_connect_func([&tcp]() {
+    tcp->on_connect([&tcp]() {
         std::cout<<"socket connected"<<std::endl;
-        tcp.write("Hello!",6);
+        tcp->write("Hello!",6);
     });
-    tcp.on_close_func([]() {
+    tcp->on_close([]() {
         std::cout<<"socket disconnected"<<std::endl;
     });
     loop.run();
     return 0;
 }
+
+int tcp_test() {
+    IOLoop loop;
+    
+    std::unique_ptr<TcpClient> client = TcpClient::create("MyEndpoint");
+    client->init("192.168.0.25",10000,&loop);
+    client->on_error([](const error_c& ec) {
+        std::cout<<"Tcp socket error:"<<ec.place()<<": "<<ec.message()<<std::endl;
+    });
+    client->on_read([](void* buf, int len) {
+        std::cout<<"Tcp client: ";
+        std::cout.write((char*)buf,len);
+        std::cout<<std::endl;
+    });
+    client->on_connect([&client]() {
+        std::cout<<"socket connected"<<std::endl;
+        client->write("Hello!",6);
+    });
+    client->on_close([]() {
+        std::cout<<"socket disconnected"<<std::endl;
+    });
+
+    std::unique_ptr<TcpServer> server = TcpServer::create("MyEndpoint");
+    std::unordered_set<std::unique_ptr<TcpSocket>> sockets;
+    server->init(10000,&loop);
+    server->on_connect([&sockets](std::unique_ptr<TcpSocket>& socket, sockaddr* addr, socklen_t len){
+        print_addr(addr,len);
+        auto ret = sockets.insert(std::move(socket));
+        if (std::get<1>(ret)) {
+            auto sock = std::get<0>(ret);
+            (*sock)->write("Hello!",6);
+            (*sock)->on_read([](void* buf, int len){
+                std::cout<<"Tcp server: ";
+                std::cout.write((char*)buf,len);
+                std::cout<<std::endl;
+            });
+            (*sock)->on_close([sock, &sockets](){
+                std::cout<<"Tcp socket closed "<<sockets.size()<<std::endl;
+                sockets.erase(sock);
+                std::cout<<"Tcp socket closed end "<<sockets.size()<<std::endl;
+            });
+            (*sock)->on_error([](const error_c& ec) {
+                std::cout<<"Tcp socket error:"<<ec.place()<<": "<<ec.message()<<std::endl;
+            });
+        } else {
+            std::cout<<"Error: socket can not inserted to set"<<std::endl;
+        }
+    });
+    server->on_close([](){
+        std::cout<<"Server closed"<<std::endl;
+    });
+    server->on_error([](const error_c& ec) {
+        std::cout<<"Tcp server error:"<<ec.place()<<": "<<ec.message()<<std::endl;
+    });
+
+    loop.run();
+    return 0;
+}
+
 
 /*int test_tcp_client_base() {
     AddrInfo request;
@@ -368,9 +427,10 @@ int main() {
     //return test_if_address();
     //return udp_client_test();
     //return tcp_client_test();
+    return tcp_test();
     //return udp_server_test();
     //return udp_server_base_test();
     //return test_tcp_client_base();
     //return tcp_server_base_test();
-    return tcp_server_test();
+    //return tcp_server_test();
 }
