@@ -4,7 +4,7 @@
 #include "err.h"
 #include "epoll.h"
 
-class Timer : public IOPollable {
+class Timer : public IOPollable, public error_handler {
 public:
     Timer();
     ~Timer();

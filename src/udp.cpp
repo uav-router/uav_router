@@ -13,7 +13,7 @@
 #include "addrinfo.h"
 //#include "timer.h"
 
-class UdpBase : public IOPollable, IOWriteable {
+class UdpBase : public IOPollable, public IOWriteable, public error_handler {
 public:
     UdpBase(const std::string n):IOPollable(n) {}
     void init(socklen_t addrlen, sockaddr *addr) {

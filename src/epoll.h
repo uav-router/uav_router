@@ -11,10 +11,11 @@ class IOLoop;
 
 class IOWriteable {
 public:
+    virtual ~IOWriteable() {}
     virtual int write(const void* buf, int len) = 0;
 };
 
-class IOPollable :  public error_handler {
+class IOPollable {
 public:
     enum {
         NOT_HANDLED = 0,

@@ -12,7 +12,7 @@ using namespace std::chrono_literals;
 #include "addrinfo.h"
 #include "timer.h"
 
-class AddrInfo : public IOPollable {
+class AddrInfo : public IOPollable, public error_handler {
 public:
     using callback_t = std::function<void(addrinfo*, std::error_code& ec)>;
     AddrInfo();
