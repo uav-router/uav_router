@@ -20,7 +20,7 @@ public:
         _addrlen = addrlen;
         memcpy(&_addr,addr,_addrlen);
     }
-    void on_read_func(OnReadFunc func) {
+    void on_read(OnReadFunc func) {
         _on_read = func;
     }
     void cleanup() override {
@@ -123,11 +123,9 @@ public:
     }
 };
 
-class UdpClient::UdpClientImpl : public error_handler {
+class UdpClientImpl : public UdpClient {
 public:
-    
     UdpClientImpl(const std::string& name):_name(name) {}
-    
     void init(const std::string& host, int port, IOLoop* loop) {
         auto on_err = [this](error_c& ec){ on_error(ec,_name);};
         _udp.on_error(on_err);
@@ -147,6 +145,19 @@ public:
         _loop = loop;
     }
 
+    void on_read(OnReadFunc func) {
+        _udp.on_read(func);
+    }
+    void on_connect(OnEventFunc func) {
+        _on_connect = func;
+    }
+    int write(const void* buf, int len) { 
+        if (!_is_writeable) {
+            return 0;
+        }
+        return _udp.write(buf,len);
+    }
+
     std::string _name;
     IOLoop *_loop;
     UdpClientBase _udp;
@@ -155,31 +166,14 @@ public:
     OnEventFunc _on_connect;
 };
 
-UdpClient::UdpClient(const std::string& name):_impl{new UdpClientImpl{name}} {
-    _impl->on_error([this](error_c& ec){ on_error(ec,"udp client");});
-}
-UdpClient::~UdpClient() {}
-
-void UdpClient::on_read_func(OnReadFunc func) {
-    _impl->_udp.on_read_func(func);
-}
-void UdpClient::on_connect_func(OnEventFunc func) {
-    _impl->_on_connect = func;
-}
-void UdpClient::init(const std::string& host, int port, IOLoop* loop) {
-    _impl->init(host, port, loop);
-}
-int UdpClient::write(const void* buf, int len) { 
-    if (!_impl->_is_writeable) {
-        return 0;
-    }
-    return _impl->_udp.write(buf,len);
+std::unique_ptr<UdpClient> UdpClient::create(const std::string& name) {
+    return std::unique_ptr<UdpClient>{new UdpClientImpl(name)};
 }
 
-class UdpServer::UdpServerImpl : public error_handler {
+class UdpServerImpl : public UdpServer {
 public:
     UdpServerImpl(const std::string& name):_name(name) {};
-    void init(int port, IOLoop* loop, const std::string& host_or_interface="") {
+    void init(int port, IOLoop* loop, const std::string& host_or_interface="") override {
         _loop = loop;
         auto on_err = [this](error_c& ec){ on_error(ec,_name);};
         _udp.on_error(on_err);
@@ -195,11 +189,15 @@ public:
         });
         _addr_resolver.init_resolving_server(port,_loop,host_or_interface);
     }
-    int write(const void* buf, int len) {
+    int write(const void* buf, int len) override {
         log::debug()<<"svr write"<<std::endl;
         if (!_is_writeable) return 0;
         return _udp.write(buf,len);
     }
+    void on_read(OnReadFunc func) override {
+        _udp.on_read(func);
+    };
+
     std::string _name;
     IOLoop *_loop;
     AddressResolver _addr_resolver;
@@ -207,16 +205,6 @@ public:
     bool _is_writeable = false;
 };
 
-UdpServer::UdpServer(const std::string& name): _impl{new UdpServerImpl{name}} {
-    _impl->on_error([this](error_c& ec){ on_error(ec,"udp server");});
-}
-UdpServer::~UdpServer() {};
-void UdpServer::on_read_func(OnReadFunc func) {
-    _impl->_udp.on_read_func(func);
-};
-void UdpServer::init(int port, IOLoop* loop, const std::string& host_or_interface) {
-    _impl->init(port, loop, host_or_interface);
-}
-int UdpServer::write(const void* buf, int len) {
-    return _impl->write(buf, len);
+std::unique_ptr<UdpServer> UdpServer::create(const std::string& name) {
+    return std::unique_ptr<UdpServer>{new UdpServerImpl(name)};
 }

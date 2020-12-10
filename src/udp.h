@@ -7,27 +7,17 @@
 
 class UdpClient : public IOWriteable, public error_handler {
 public:
-    UdpClient(const std::string& name);
-    ~UdpClient();
-    void init(const std::string& host, int port, IOLoop* loop);
-    int write(const void* buf, int len) override;
-    void on_read_func(OnReadFunc func);
-    void on_connect_func(OnEventFunc func);
-private:
-    class UdpClientImpl;
-    std::unique_ptr<UdpClientImpl> _impl;
+    virtual void init(const std::string& host, int port, IOLoop* loop) = 0;
+    virtual void on_read(OnReadFunc func) = 0;
+    virtual void on_connect(OnEventFunc func) = 0;
+    static std::unique_ptr<UdpClient> create(const std::string& name);
 };
 
 class UdpServer : public IOWriteable, public error_handler {
 public:
-    UdpServer(const std::string& name);
-    ~UdpServer();
-    void init(int port, IOLoop* loop, const std::string& host_or_interface="");
-    int write(const void* buf, int len) override;
-    void on_read_func(OnReadFunc func);
-private:
-    class UdpServerImpl;
-    std::unique_ptr<UdpServerImpl> _impl;
+    virtual void init(int port, IOLoop* loop, const std::string& host_or_interface="") = 0;
+    virtual void on_read(OnReadFunc func) = 0;
+    static std::unique_ptr<UdpServer> create(const std::string& name);
 };
 
 //TODO: Implement multicasts and broadcasts

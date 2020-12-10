@@ -189,16 +189,16 @@ int tcp_server_test() {
 
 int udp_client_test() {
     IOLoop loop;
-    UdpClient udp("MyEndpoint");
-    udp.init("localhost",20001, &loop);
-    udp.on_read_func([](void* buf, int len){
+    auto udp = UdpClient::create("MyEndpoint");
+    udp->init("localhost",20001, &loop);
+    udp->on_read([](void* buf, int len){
         std::cout.write((char*)buf,len);
         std::cout<<std::endl;
     });
-    udp.on_connect_func([&udp]() {
-        std::cout<<"on connect "<<udp.write("Hello!", 6)<<std::endl;
+    udp->on_connect([&udp]() {
+        std::cout<<"on connect "<<udp->write("Hello!", 6)<<std::endl;
     });
-    udp.on_error([](const error_c& ec) {
+    udp->on_error([](const error_c& ec) {
         std::cout<<"Udp socket error:"<<ec.place()<<": "<<ec.message()<<std::endl;
     });
     loop.run();
@@ -207,17 +207,51 @@ int udp_client_test() {
 
 int udp_server_test() {
     IOLoop loop;
-    UdpServer udp("MyEndpoint");
-    udp.init(20001, &loop);
-    udp.on_read_func([&udp](void* buf, int len){
+    auto udp = UdpServer::create("MyEndpoint");
+    udp->init(20001, &loop);
+    udp->on_read([&udp](void* buf, int len){
         std::cout.write((char*)buf,len);
         std::cout<<std::endl;
         const char* answ = "Hello from server!";
-        udp.write(answ, strlen(answ));
+        udp->write(answ, strlen(answ));
     });
-    udp.on_error([&udp](const error_c& ec) {
+    udp->on_error([](const error_c& ec) {
         std::cout<<"Udp socket error:"<<ec.place()<<": "<<ec.message()<<std::endl;
     });
+    loop.run();
+    return 0;
+}
+
+int udp_test() {
+    IOLoop loop;
+
+    auto server = UdpServer::create("ServerEndpoint");
+    server->init(20001, &loop);
+    server->on_read([&server](void* buf, int len){
+        std::cout<<"Server reads: ";
+        std::cout.write((char*)buf,len);
+        std::cout<<std::endl;
+        const char* answ = "Hello from server!";
+        server->write(answ, strlen(answ));
+    });
+    server->on_error([](const error_c& ec) {
+        std::cout<<"Udp socket error:"<<ec.place()<<": "<<ec.message()<<std::endl;
+    });
+
+    auto client = UdpClient::create("ClientEndpoint");
+    client->init("localhost",20001, &loop);
+    client->on_read([](void* buf, int len){
+        std::cout<<"Client reads: ";
+        std::cout.write((char*)buf,len);
+        std::cout<<std::endl;
+    });
+    client->on_connect([&client]() {
+        std::cout<<"on connect "<<client->write("Hello!", 6)<<std::endl;
+    });
+    client->on_error([](const error_c& ec) {
+        std::cout<<"Udp socket error:"<<ec.place()<<": "<<ec.message()<<std::endl;
+    });
+
     loop.run();
     return 0;
 }
@@ -225,7 +259,7 @@ int udp_server_test() {
 
 int tcp_client_test() {
     IOLoop loop;
-    std::unique_ptr<TcpClient> tcp = TcpClient::create("MyEndpoint");
+    auto tcp = TcpClient::create("MyEndpoint");
     tcp->init("192.168.0.25",10000,&loop);
     tcp->on_error([&tcp](const error_c& ec) {
         std::cout<<"Tcp socket error:"<<ec.place()<<": "<<ec.message()<<std::endl;
@@ -248,7 +282,7 @@ int tcp_client_test() {
 int tcp_test() {
     IOLoop loop;
     
-    std::unique_ptr<TcpClient> client = TcpClient::create("MyEndpoint");
+    auto client = TcpClient::create("ServerEndpoint");
     client->init("192.168.0.25",10000,&loop);
     client->on_error([](const error_c& ec) {
         std::cout<<"Tcp socket error:"<<ec.place()<<": "<<ec.message()<<std::endl;
@@ -266,7 +300,7 @@ int tcp_test() {
         std::cout<<"socket disconnected"<<std::endl;
     });
 
-    std::unique_ptr<TcpServer> server = TcpServer::create("MyEndpoint");
+    auto server = TcpServer::create("ClientEndpoint");
     std::unordered_set<std::unique_ptr<TcpSocket>> sockets;
     server->init(10000,&loop);
     server->on_connect([&sockets](std::unique_ptr<TcpSocket>& socket, sockaddr* addr, socklen_t len){
@@ -427,7 +461,8 @@ int main() {
     //return test_if_address();
     //return udp_client_test();
     //return tcp_client_test();
-    return tcp_test();
+    //return tcp_test();
+    return udp_test();
     //return udp_server_test();
     //return udp_server_base_test();
     //return test_tcp_client_base();
