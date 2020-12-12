@@ -19,6 +19,7 @@ def build(bld):
         source=[
             'tests/test.cpp',
             'src/udp.cpp',
+            'src/uart.cpp',
             'src/tcp.cpp',
             'src/timer.cpp',
             'src/err.cpp',

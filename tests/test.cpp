@@ -337,6 +337,10 @@ int tcp_test() {
     return 0;
 }
 
+int uart_test() {
+    return 0;
+}
+
 
 /*int test_tcp_client_base() {
     AddrInfo request;
