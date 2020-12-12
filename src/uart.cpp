@@ -107,7 +107,7 @@ int _set_flow_control(int baudrate) { return 0;}
 class UARTImpl: public IOPollable, public UART {
 public:
     UARTImpl(const std::string& name): IOPollable("uart"), _name(name) {}
-    void init(const std::string& path, int baudrate, bool flow_control, IOLoop* loop) override {
+    void init(const std::string& path, IOLoop* loop, int baudrate, bool flow_control) override {
         _path = path;
         _baudrate = baudrate;
         _flow_control = flow_control;

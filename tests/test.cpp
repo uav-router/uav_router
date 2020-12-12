@@ -7,6 +7,7 @@
 #include <arpa/inet.h>
 
 #include <iostream>
+#include <iomanip>
 
 #include <chrono>
 using namespace std::chrono_literals;
@@ -18,9 +19,7 @@ using namespace std::chrono_literals;
 #include <epoll.h>
 #include <addrinfo.h>
 #include <timer.h>
-#include <udp.h>
-#include <tcp.h>
-
+#include <uart.h>
 
 //g++ test.cpp src/udp.cpp src/timer.cpp src/err.cpp src/epoll.cpp src/log.cpp src/addrinfo.cpp -I src -o test -lanl
 
@@ -75,12 +74,6 @@ int timer_test() {
     loop.execute(&request);
     request.on_shoot_func([] () {std::cout<<"Timer event"<<std::endl;});
     loop.run();
-    return 0;
-}
-
-
-
-int uart_test() {
     return 0;
 }
 
@@ -163,6 +156,27 @@ int getifaddr_test() {
 
    freeifaddrs(ifaddr);
    exit(EXIT_SUCCESS);
+}
+
+int uart_test() {
+    IOLoop loop;
+    auto uart = UART::create("UartEndpoint");
+    uart->init("/dev/ttyACM1",&loop);
+    uart->on_connect([]() {
+        std::cout<<"uart connected"<<std::endl;
+    });
+    uart->on_close([]() {
+        std::cout<<"uart disconnected"<<std::endl;
+    });
+    uart->on_read([](void* buf, int len) {
+        std::cout<<"UART: ";
+        uint8_t *arr = (uint8_t*)buf;
+        for (int i = len; i; i--) 
+            std::cout<<std::hex<<std::setw(2)<<std::setfill('0')<<*arr++<<" ";
+        std::cout<<std::endl;
+    });
+    loop.run();
+    return 0;
 }
 
 int main() {
