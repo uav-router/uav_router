@@ -1,3 +1,5 @@
+#ifndef __TIMER_H__
+#define __TIMER_H__
 #include <chrono>
 #include <memory>
 
@@ -19,3 +21,5 @@ private:
     class TimerImpl;
     std::unique_ptr<TimerImpl> _impl;
 };
+
+#endif // __TIMER_H__

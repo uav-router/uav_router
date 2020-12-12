@@ -160,6 +160,9 @@ public:
         std::string port_ = std::to_string(port);
         _ai.init(host,port_,AF_INET,SOCK_DGRAM,IPPROTO_UDP);
         _loop = loop;
+        auto on_err = [this](error_c& ec){ on_error(ec,"address resolver");};
+        _ai.on_error(on_err);
+        _timer.on_error(on_err);
         start_address_resolving();
     }
 

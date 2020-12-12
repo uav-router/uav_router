@@ -38,3 +38,14 @@ bool error_handler::on_error(error_c& ec, const std::string& place) {
     }
     return true;
 }
+
+bool error_handler::on_error(int ret, const std::string& place) {
+    if (!ret) return false;
+    errno_c ec;
+    if (!place.empty()) ec.add_place(place);
+    if (_on_error) { _on_error(ec);
+    } else {
+        log::error()<<ec.place()<<": "<<ec.message()<<std::endl;
+    }
+    return true;
+}

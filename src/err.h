@@ -49,6 +49,7 @@ public:
     }
 protected:
     bool on_error(error_c& ec, const std::string& place = "");
+    bool on_error(int ret, const std::string& place = "");
 private:
     callback_t _on_error;
 };
