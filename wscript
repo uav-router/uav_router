@@ -15,19 +15,23 @@ def configure(conf):
     conf.load('compiler_cxx')
     conf.env.CPPFLAGS = ['-g']
 def build(bld):
+    sources = bld.path.find_node('src').ant_glob('*.cpp')
+    tests_dir = bld.path.find_node('tests')
     bld.program(
-        source=[
-            'tests/test.cpp',
-            'src/udp.cpp',
-            'src/uart.cpp',
-            'src/tcp.cpp',
-            'src/timer.cpp',
-            'src/err.cpp',
-            'src/epoll.cpp',
-            'src/log.cpp',
-            'src/addrinfo.cpp'
-        ], 
+        source= [ tests_dir.find_node('test.cpp') ] + sources,
         target='test',
+        includes     = ['src'],
+        lib          = ['anl']
+    )
+    bld.program(
+        source= [ tests_dir.find_node('tcp_test.cpp') ] + sources,
+        target='tcptest',
+        includes     = ['src'],
+        lib          = ['anl']
+    )
+    bld.program(
+        source= [ tests_dir.find_node('udp_test.cpp') ] + sources,
+        target='udptest',
         includes     = ['src'],
         lib          = ['anl']
     )
