@@ -9,7 +9,7 @@
 #include <termios.h>
 #include <linux/serial.h>
 
-
+#include <map>
 #include <chrono>
 using namespace std::chrono_literals;
 
@@ -19,94 +19,45 @@ using namespace std::chrono_literals;
 #include "uart.h"
 #include "timer.h"
 
-namespace asm_termios {
-    #include <asm/termios.h>
-    struct Termios2 : public termios2 {
-    public:
-        Termios2(int fd):_fd(fd) {}
-        error_c get() {
-            return err_chk(ioctl(_fd, TCGETS2, this),"termios2 get");
-        }
-        error_c set() {
-            return err_chk(ioctl(_fd, TCGETS2, this),"termios2 get");
-        }
-        int _fd;
-    };
+std::map<int, speed_t> bauds = {
+    {0,      B0},
+    {50,     B50},
+    {75,     B75},
+    {110,    B110},
+    {134,    B134},
+    {150,    B150},
+    {200,    B200},
+    {300,    B300},
+    {600,    B600},
+    {1200,   B1200},
+    {1800,   B1800},
+    {2400,   B2400},
+    {4800,   B4800},
+    {9600,   B9600},
+    {19200,  B19200},
+    {38400,  B38400},
+    {57600,  B57600},
+    {115200, B115200},
+    {230400, B230400},
+    {460800, B460800},
+    {500000, B500000},
+    {576000, B576000},
+    {921600, B921600},
+    {1000000,B1000000},
+    {1152000,B1152000},
+    {1500000,B1500000},
+    {2000000,B2000000},
+    {2500000,B2500000},
+    {3000000,B3000000},
+    {3500000,B3500000},
+    {4000000,B4000000}
+};
 
-    error_c init(int fd) {
-        Termios2 tc(fd);
-        error_c ret = tc.get();
-        if (ret) return ret;
-        tc.c_iflag &= ~(IGNBRK | BRKINT | ICRNL | INLCR | PARMRK | INPCK | ISTRIP | IXON);
-        tc.c_oflag &= ~(OCRNL | ONLCR | ONLRET | ONOCR | OFILL | OPOST);
-        tc.c_lflag &= ~(ECHO | ECHOE | ECHOK | ECHOCTL | ECHOKE | ECHONL | ICANON 
-                             | IEXTEN | ISIG | TOSTOP);
-        tc.c_cflag &= ~(CRTSCTS | CSIZE | PARENB);
-        tc.c_cflag |= CLOCAL | CS8;
-        tc.c_cc[VMIN] = 0;
-        tc.c_cc[VTIME] = 0;
-        return tc.set();
-    }
-
-    error_c set_speed(int fd, speed_t baudrate) {
-        Termios2 tc(fd);
-        error_c ret = tc.get();
-        if (ret) return ret;
-        tc.c_cflag &= ~CBAUD;
-        tc.c_cflag |= BOTHER;
-        tc.c_ispeed = baudrate;
-        tc.c_ospeed = baudrate;
-        ret = tc.set();
-        if (ret) return ret;
-        return err_chk(ioctl(fd, TCFLSH, TCIOFLUSH),"terminal flush");
-    }
-
-    error_c set_flow_control(int fd, bool enabled)
-    {
-        Termios2 tc(fd);
-        error_c ret = tc.get();
-        if (ret) return ret;
-        if (enabled)
-            tc.c_cflag |= CRTSCTS;
-        else
-            tc.c_cflag &= ~CRTSCTS;
-        return tc.set();
-    }
-
-
-}
-
-error_c reset_uart(int fd) {
-    struct termios tc = {};
-
-    error_c ret = err_chk(tcgetattr(fd, &tc),"tcgetaddr");
-    if (ret) return ret;
-
-    tc.c_cflag = CREAD;
-
-    tc.c_iflag |= BRKINT | ICRNL | IMAXBEL;
-    tc.c_iflag &= ~(INLCR | IGNCR | IUTF8 | IXOFF| IUCLC | IXANY);
-
-    tc.c_oflag |= OPOST | ONLCR;
-    tc.c_oflag &= ~(OLCUC | OCRNL | ONLRET | OFILL | OFDEL | NL0 | CR0 | TAB0 | BS0 | VT0 | FF0);
-
-    tc.c_lflag |= ISIG | ICANON | IEXTEN | ECHO | ECHOE | ECHOK | ECHOCTL | ECHOKE;
-    tc.c_lflag &= ~(ECHONL | NOFLSH | XCASE | TOSTOP | ECHOPRT);
-
-    const cc_t default_cc[] = { 03, 034, 0177, 025, 04, 0, 0, 0, 021, 023, 032, 0,
-                            022, 017, 027, 026, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                            0, 0, 0, 0, 0, 0 };
-    static_assert(sizeof(default_cc) == sizeof(tc.c_cc), "Unknown termios struct with different size");
-    memcpy(tc.c_cc, default_cc, sizeof(default_cc));
-    cfsetspeed(&tc, B1200);
-    return err_chk(tcsetattr(fd, TCSANOW, &tc),"tcsetaddr");
-}
-
-int _set_flow_control(int baudrate) { return 0;}
 
 class UARTImpl: public IOPollable, public UART {
 public:
     UARTImpl(const std::string& name): IOPollable("uart"), _name(name) {}
+    
     void init(const std::string& path, IOLoop* loop, int baudrate, bool flow_control) override {
         _path = path;
         _baudrate = baudrate;
@@ -114,6 +65,7 @@ public:
         _loop = loop;
         auto on_err = [this](error_c& ec){ on_error(ec,_name);};
         _timer.on_error(on_err);
+        init_uart_retry();
     }
 
     void init_uart_retry() {
@@ -125,7 +77,7 @@ public:
             _timer.on_shoot_func([this]() { init_uart_retry(); });
             return;
         }
-        ret = _loop->add(_fd, EPOLLIN | EPOLLOUT, this);
+        ret = _loop->add(_fd, EPOLLIN | EPOLLOUT | EPOLLET, this);
         on_error(ret,"uart loop add");
     }
     
@@ -143,11 +95,36 @@ public:
         if (_fd == -1) { return errno_c("uart "+_path+" open");
         }
         FD watcher(_fd);
-        error_c ret = reset_uart(_fd);
+        const auto& b = bauds.find(_baudrate);
+        if (b == bauds.end()) return errno_c(EINVAL,"uart "+_path+" open");
+        struct termios tty;
+        error_c ret = err_chk(tcgetattr(_fd, &tty),"tcgetaddr");
         if (ret) return ret;
-        ret = asm_termios::init(_fd);
+        ret = err_chk(cfsetospeed(&tty, b->second),"cfsetospeed");
         if (ret) return ret;
-
+        ret = err_chk(cfsetispeed(&tty, b->second),"cfsetispeed");
+        if (ret) return ret;
+        tty.c_cflag = (tty.c_cflag & ~CSIZE) | CS8 | CLOCAL | CREAD;
+        if (_flow_control) tty.c_cflag |= CRTSCTS;
+        
+        tty.c_iflag = IGNBRK;
+        //if (software_flow) tty.c_iflag |= IXON | IXOFF;
+        
+        tty.c_lflag = 0;
+        tty.c_oflag = 0;
+        tty.c_cc[VMIN] = 0;
+        tty.c_cc[VTIME] = 0;
+        ret = err_chk(tcsetattr(_fd, TCSANOW, &tty),"tcsetaddr");
+        if (ret) return ret;
+        
+        const int bit_dtr = TIOCM_DTR;
+        ret = err_chk(ioctl(_fd, TIOCMBIS, &bit_dtr),"set dtr "+_path);
+        if (ret) return ret;
+        
+        const int bit_rts = TIOCM_RTS;
+        ret = err_chk(ioctl(_fd, TIOCMBIS, &bit_rts),"set rts "+_path);
+        if (ret) return ret;
+        
         struct serial_struct serial_ctl;
         ret = err_chk(ioctl(_fd, TIOCGSERIAL, &serial_ctl),"get serial "+_path);
         if (!ret) {
@@ -156,21 +133,13 @@ public:
         }
         if (ret) {
             log::warning()<<"Low latency "<<ret.place()<<" : "<<ret.message()<<std::endl;
+            log::info()<<"Open UART "<<_path<<std::endl;
+        } else {
+            log::info()<<"Open UART with low latency "<<_path<<std::endl;
         }
-
-        const int bit_dtr = TIOCM_DTR;
-        const int bit_rts = TIOCM_RTS;
-        ret = err_chk(ioctl(_fd, TIOCMBIS, &bit_dtr),"set dtr "+_path);
-        if (ret) return ret;
-        ret = err_chk(ioctl(_fd, TIOCMBIS, &bit_rts),"set rts "+_path);
-        if (ret) return ret;
         ret = err_chk(ioctl(_fd, TCFLSH, TCIOFLUSH),"flush "+_path);
         if (ret) return ret;
-        ret = asm_termios::set_speed(_fd, _baudrate);
-        if (ret) return ret;
-        ret = asm_termios::set_flow_control(_fd, _flow_control);
-        if (ret) return ret;
-        log::info()<<"Open UART "<<_path<<std::endl;
+        
         watcher.clear();
         return error_c();
     }
@@ -184,9 +153,10 @@ public:
                 if (ret != std::error_condition(std::errc::resource_unavailable_try_again)) {
                     on_error(ret, "uart read");
                 }
+                break;
             }
             if (n==0) {
-                log::warning()<<"UART read returns 0 bytes"<<std::endl;
+                //log::warning()<<"UART read returns 0 bytes"<<std::endl;
                 break;
             }
             if (_on_read) _on_read(buffer, n);
@@ -236,7 +206,7 @@ public:
 private:
     std::string _name;
     std::string _path;
-    int _baudrate = 115200;
+    speed_t _baudrate = B115200;
     bool _is_writeable = false;
     bool _flow_control = false;
     IOLoop* _loop;

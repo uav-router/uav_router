@@ -161,7 +161,7 @@ int getifaddr_test() {
 int uart_test() {
     IOLoop loop;
     auto uart = UART::create("UartEndpoint");
-    uart->init("/dev/ttyACM1",&loop);
+    uart->init("/dev/ttyS1",&loop,921600);//115200);
     uart->on_connect([]() {
         std::cout<<"uart connected"<<std::endl;
     });
@@ -169,11 +169,19 @@ int uart_test() {
         std::cout<<"uart disconnected"<<std::endl;
     });
     uart->on_read([](void* buf, int len) {
-        std::cout<<"UART: ";
+        std::cout<<"UART("<<len<<"): ";
+        const char* hex = "0123456789ABCDEF";
         uint8_t *arr = (uint8_t*)buf;
-        for (int i = len; i; i--) 
-            std::cout<<std::hex<<std::setw(2)<<std::setfill('0')<<*arr++<<" ";
+        for (int i = len; i; i--) {
+            uint8_t b = *arr++;
+            std::cout<<hex[(b>>4) & 0x0F];
+            std::cout<<hex[b & 0x0F]<<' ';
+        }
+            
         std::cout<<std::endl;
+    });
+    uart->on_error([](const error_c& ec) {
+        std::cout<<"UART error:"<<ec.place()<<": "<<ec.message()<<std::endl;
     });
     loop.run();
     return 0;
@@ -181,7 +189,7 @@ int uart_test() {
 
 int main() {
     log::init();
-    log::set_level(log::Level::DEBUG);
+    //log::set_level(log::Level::DEBUG);
     //return addrinfo_test();
     //getifaddr_test();
     //return timer_test();
