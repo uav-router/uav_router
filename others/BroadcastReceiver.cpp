@@ -35,23 +35,28 @@ int main(int argc, char *argv[])
     if (setsockopt(sock, SOL_SOCKET, SO_BROADCAST, (void *) &broadcastPermission, 
           sizeof(broadcastPermission)) < 0)
         DieWithError("setsockopt() failed");
+
+    if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, (void *) &broadcastPermission, 
+          sizeof(broadcastPermission)) < 0)
+        DieWithError("setsockopt() failed");
     /* Construct bind structure */
     memset(&broadcastAddr, 0, sizeof(broadcastAddr));   /* Zero out structure */
     broadcastAddr.sin_family = AF_INET;                 /* Internet address family */
-    broadcastAddr.sin_addr.s_addr = htonl(INADDR_ANY);  /* Any incoming interface */
+    broadcastAddr.sin_addr.s_addr = htonl(INADDR_ANY);//inet_addr("192.168.0.255"); //inet_addr("192.168.0.131");inet_addr("172.17.0.1")  /* Any incoming interface */
     broadcastAddr.sin_port = htons(broadcastPort);      /* Broadcast port */
 
     /* Bind to the broadcast port */
     if (bind(sock, (struct sockaddr *) &broadcastAddr, sizeof(broadcastAddr)) < 0)
         DieWithError("bind() failed");
 
+    for(;;) {
     /* Receive a single datagram from the server */
     if ((recvStringLen = recvfrom(sock, recvString, MAXRECVSTRING, 0, NULL, 0)) < 0)
         DieWithError("recvfrom() failed");
 
     recvString[recvStringLen] = '\0';
     printf("Received: %s\n", recvString);    /* Print the received string */
-    
+    }
     close(sock);
     exit(0);
 }

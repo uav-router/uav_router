@@ -44,12 +44,14 @@ int main(int argc, char *argv[])
     broadcastAddr.sin_family = AF_INET;                 /* Internet address family */
     broadcastAddr.sin_addr.s_addr = inet_addr(broadcastIP);/* Broadcast IP address */
     broadcastAddr.sin_port = htons(broadcastPort);         /* Broadcast port */
-
-    sendStringLen = strlen(sendString);  /* Find length of sendString */
+    char buf[1024];
+    int cnt = 0;
     for (;;) /* Run forever */
     {
          /* Broadcast sendString in datagram to clients every 3 seconds*/
-         if (sendto(sock, sendString, sendStringLen, 0, (struct sockaddr *) 
+         sendStringLen = snprintf(buf,1024,"%s:%i", sendString, cnt++);  /* Find length of sendString */
+         printf("Send: %s\n",buf);
+         if (sendto(sock, buf, sendStringLen, 0, (struct sockaddr *) 
                &broadcastAddr, sizeof(broadcastAddr)) != sendStringLen)
              DieWithError("sendto() sent a different number of bytes than expected");
 
