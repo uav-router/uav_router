@@ -141,8 +141,19 @@ int getifaddr_test() {
                printf("getnameinfo() failed: %s\n", gai_strerror(s));
                exit(EXIT_FAILURE);
            }
-
            printf("\t\taddress: <%s>\n", host);
+           if (ifa->ifa_flags | IFF_BROADCAST) {
+               s = getnameinfo(ifa->ifa_broadaddr,
+                       (family == AF_INET) ? sizeof(struct sockaddr_in) :
+                                             sizeof(struct sockaddr_in6),
+                       host, NI_MAXHOST,
+                       NULL, 0, NI_NUMERICHOST);
+               if (s != 0) {
+                   printf("getnameinfo() failed: %s\n", gai_strerror(s));
+                   exit(EXIT_FAILURE);
+               }
+               printf("\t\tbroadcast address: <%s>\n", host);
+           }
 
        } else if (family == AF_PACKET && ifa->ifa_data != NULL) {
            struct rtnl_link_stats *stats = (rtnl_link_stats *)ifa->ifa_data;
@@ -194,5 +205,6 @@ int main() {
     //getifaddr_test();
     //return timer_test();
     //return test_if_address();
-    return uart_test();
+    //return uart_test();
+    return getifaddr_test();
 }
