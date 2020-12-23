@@ -4,9 +4,9 @@
 #include <stdlib.h>     /* for atoi() and exit() */
 #include <string.h>     /* for memset() */
 #include <unistd.h>     /* for close() */
-
+#define MAXRECVSTRING 255  /* Longest string to receive */
 void DieWithError(const char *errorMessage) {
-    printf(errorMessage);
+    printf("%s\n",errorMessage);
 }
 
 int main(int argc, char *argv[])
@@ -37,7 +37,11 @@ int main(int argc, char *argv[])
     broadcastPermission = 1;
     if (setsockopt(sock, SOL_SOCKET, SO_BROADCAST, (void *) &broadcastPermission, 
           sizeof(broadcastPermission)) < 0)
-        DieWithError("setsockopt() failed");
+        DieWithError("setsockopt(broadcast) failed");
+
+    struct timeval tv;
+    tv.tv_sec = 2;  /* 30 Secs Timeout */
+    if (setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO,(struct timeval *)&tv,sizeof(struct timeval)) < 0) DieWithError("setsockopt(rcvtimeo) failed");
 
     /* Construct local address structure */
     memset(&broadcastAddr, 0, sizeof(broadcastAddr));   /* Zero out structure */
@@ -54,8 +58,15 @@ int main(int argc, char *argv[])
          if (sendto(sock, buf, sendStringLen, 0, (struct sockaddr *) 
                &broadcastAddr, sizeof(broadcastAddr)) != sendStringLen)
              DieWithError("sendto() sent a different number of bytes than expected");
-
-        sleep(3);   /* Avoids flooding the network */
+    
+        char recvString[MAXRECVSTRING+1]; /* Buffer for received string */
+        int recvStringLen;                /* Length of received string */
+        if ((recvStringLen = recvfrom(sock, recvString, MAXRECVSTRING, 0, nullptr, 0)) < 0) { DieWithError("recvfrom() failed");
+        } else {
+            recvString[recvStringLen] = '\0';
+            printf("Answer: %s \n", recvString);    /* Print the received string */
+        }
+        sleep(1);   /* Avoids flooding the network */
     }
     /* NOT REACHED */
 }

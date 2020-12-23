@@ -124,12 +124,12 @@ public:
         }
         int yes = 1;
         //TODO: SO_PRIORITY SO_RCVBUF SO_SNDBUF SO_RCVLOWAT SO_SNDLOWAT SO_RCVTIMEO SO_SNDTIMEO SO_TIMESTAMP SO_TIMESTAMPNS SO_INCOMING_CPU
-        errno_c ret = err_chk(setsockopt(_fd,SOL_SOCKET,SO_REUSEADDR,&yes,sizeof(yes)),"reuseaddr");
+        /*errno_c ret = err_chk(setsockopt(_fd,SOL_SOCKET,SO_REUSEADDR,&yes,sizeof(yes)),"reuseaddr");
         if (ret) {
             close(_fd);
             return ret;
-        }
-        ret = err_chk(setsockopt(_fd,SOL_SOCKET,SO_KEEPALIVE,&yes,sizeof(yes)),"keepalive");
+        }*/
+        errno_c ret = err_chk(setsockopt(_fd,SOL_SOCKET,SO_KEEPALIVE,&yes,sizeof(yes)),"keepalive");
         if (ret) {
             close(_fd);
             return ret;
@@ -331,7 +331,7 @@ public:
         errno_c ret = check();
         if (ret) { on_error(ret);
         } else while(true) {
-            sockaddr_in client_addr;
+            sockaddr_storage client_addr;
             socklen_t ca_len = sizeof(client_addr);
             //log::debug()<<"before accept"<<std::endl;
             int client = accept(_fd, (sockaddr *) &client_addr, &ca_len);

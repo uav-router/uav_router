@@ -75,10 +75,46 @@ int udp_test() {
     return 0;
 }
 
+//sudo firewall-cmd --permanent --direct --add-rule ipv4 filter INPUT 0 -m pkttype --pkt-type broadcast -j ACCEPT
+//sudo firewall-cmd --reload
+int udp_broadcast_test() {
+    IOLoop loop;
+
+    auto server = UdpServer::create("ServerEndpoint");
+    server->on_read([&server](void* buf, int len){
+        std::cout<<"Server reads: ";
+        std::cout.write((char*)buf,len);
+        std::cout<<std::endl;
+        const char* answ = "Hello from server!";
+        server->write(answ, strlen(answ));
+    });
+    server->on_error([](const error_c& ec) {
+        std::cout<<"Udp socket error:"<<ec.place()<<": "<<ec.message()<<std::endl;
+    });
+    server->init(15000, &loop, "<broadcast>", true);
+
+    auto client = UdpClient::create("ClientEndpoint");
+    client->on_read([](void* buf, int len){
+        std::cout<<"Client reads: ";
+        std::cout.write((char*)buf,len);
+        std::cout<<std::endl;
+    });
+    client->on_connect([&client]() {
+        std::cout<<"on connect "<<client->write("Hello!", 6)<<std::endl;
+    });
+    client->on_error([](const error_c& ec) {
+        std::cout<<"Udp socket error:"<<ec.place()<<": "<<ec.message()<<std::endl;
+    });
+    client->init_broadcast(15000, &loop,"<broadcast>");
+    loop.run();
+    return 0;
+}
+
 int main() {
     log::init();
     log::set_level(log::Level::DEBUG);
-    return udp_test();
+    //return udp_test();
+    return udp_broadcast_test();
 }
 
 /*int udp_client_base_test() {

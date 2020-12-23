@@ -4,8 +4,21 @@
 #include <stdlib.h>     /* for atoi() and exit() */
 #include <string.h>     /* for memset() */
 #include <unistd.h>     /* for close() */
-
+#include <iostream>
+#include <netdb.h>
 #define MAXRECVSTRING 255  /* Longest string to receive */
+
+
+void print_addr(const struct sockaddr *sa, socklen_t salen) {
+    char host[NI_MAXHOST];
+    char port[NI_MAXSERV];
+    int ec = getnameinfo(sa, salen, host, sizeof(host), port, sizeof(port), NI_NUMERICHOST | NI_NUMERICSERV);
+    if (ec) {
+       std::cout<<"Get nameinfo error: "<<ec<<" family="<<sa->sa_family<<" len="<<salen<<std::endl;
+    } else {
+        std::cout<<"address = "<<host<<":"<<port<<std::endl;
+    }
+}
 
 void DieWithError(const char *errorMessage){
     printf(errorMessage);
@@ -32,9 +45,9 @@ int main(int argc, char *argv[])
         DieWithError("socket() failed");
 
     int broadcastPermission = 1;
-    if (setsockopt(sock, SOL_SOCKET, SO_BROADCAST, (void *) &broadcastPermission, 
+    /*if (setsockopt(sock, SOL_SOCKET, SO_BROADCAST, (void *) &broadcastPermission, 
           sizeof(broadcastPermission)) < 0)
-        DieWithError("setsockopt() failed");
+        DieWithError("setsockopt() failed");*/
 
     if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, (void *) &broadcastPermission, 
           sizeof(broadcastPermission)) < 0)
@@ -51,11 +64,17 @@ int main(int argc, char *argv[])
 
     for(;;) {
     /* Receive a single datagram from the server */
-    if ((recvStringLen = recvfrom(sock, recvString, MAXRECVSTRING, 0, NULL, 0)) < 0)
+    sockaddr_storage client_addr;
+    socklen_t ca_len = sizeof(client_addr);
+    if ((recvStringLen = recvfrom(sock, recvString, MAXRECVSTRING, 0, (sockaddr *) &client_addr, &ca_len)) < 0) {
         DieWithError("recvfrom() failed");
-
-    recvString[recvStringLen] = '\0';
-    printf("Received: %s\n", recvString);    /* Print the received string */
+    } else {
+        recvString[recvStringLen] = '\0';
+        printf("Received: %s ", recvString);    /* Print the received string */
+        print_addr((sockaddr *) &client_addr, ca_len);
+        if (sendto(sock, recvString, recvStringLen, 0, (sockaddr *) &client_addr, ca_len) != recvStringLen)
+                 DieWithError("sendto() sent a different number of bytes than expected");
+        }
     }
     close(sock);
     exit(0);

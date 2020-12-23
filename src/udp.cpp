@@ -16,7 +16,8 @@
 class UdpBase : public IOPollable, public IOWriteable, public error_handler {
 public:
     UdpBase(const std::string n):IOPollable(n) {}
-    void init(socklen_t addrlen, sockaddr *addr) {
+    void init(socklen_t addrlen, sockaddr *addr, bool broadcast=false) {
+        _broadcast=broadcast;
         _addrlen = addrlen;
         memcpy(&_addr,addr,_addrlen);
     }
@@ -84,6 +85,7 @@ protected:
     int _fd = -1;
     bool is_writeable = true;
     OnReadFunc _on_read;
+    bool _broadcast = false;
 };
 
 class UdpClientBase : public UdpBase {
@@ -92,6 +94,11 @@ public:
     virtual error_c start_with(IOLoop* loop) override {
         _fd = socket(AF_INET, SOCK_DGRAM | SOCK_NONBLOCK, 0);
         if (_fd == -1) { return errno_c("udp client socket");
+        }
+        if (_broadcast) {
+            int yes = 1;
+            errno_c ret = err_chk(setsockopt(_fd, SOL_SOCKET, SO_BROADCAST, (void *) &yes, sizeof(yes)),"setsockopt(broadcast)");
+            if (ret) return ret;
         }
         is_writeable = true;
         return loop->add(_fd, EPOLLIN | EPOLLOUT | EPOLLET, this);
@@ -108,6 +115,14 @@ public:
         _fd = socket(AF_INET, SOCK_DGRAM | SOCK_NONBLOCK, 0);
         if (_fd == -1) { return errno_c("udp server socket");
         }
+        if (_broadcast) {
+            int yes = 1;
+            errno_c ret = err_chk(setsockopt(_fd,SOL_SOCKET,SO_REUSEADDR,&yes,sizeof(yes)),"reuseaddr");
+            if (ret) {
+                close(_fd);
+                return ret;
+            }
+        }
         errno_c ret = err_chk(bind(_fd, (sockaddr *)&_addr, _addrlen), "udp server bind");
         if (ret) return ret;
         return loop->add(_fd, EPOLLIN | EPOLLOUT | EPOLLET, this);
@@ -121,12 +136,15 @@ public:
         log::debug()<<"send"<<std::endl;
         return send(buf,len,(sockaddr*)&_send_addr, _send_addrlen);
     }
+
+    bool _broadcast = false;
 };
 
 class UdpClientImpl : public UdpClient {
 public:
     UdpClientImpl(const std::string& name):_name(name) {}
-    void init(const std::string& host, int port, IOLoop* loop) {
+
+    void init(const std::string& host, int port, IOLoop* loop) override {
         auto on_err = [this](error_c& ec){ on_error(ec,_name);};
         _udp.on_error(on_err);
         _addr_resolver.on_error(on_err);
@@ -136,13 +154,32 @@ public:
             if (ret) { on_error(ret,_name);
             } else {
                 _is_writeable = true;
-                log::debug()<<"on connect ok"<<std::endl;
+                log::debug()<<"on connect client ok"<<std::endl;
                 if (_on_connect) { _on_connect();
                 }
             }
         });
         _addr_resolver.init_resolving_client(host,port,loop);
         _loop = loop;
+    }
+
+    void init_broadcast(int port, IOLoop* loop, const std::string& interface) override {
+        auto on_err = [this](error_c& ec){ on_error(ec,_name);};
+        _udp.on_error(on_err);
+        _loop = loop;
+        _addr_resolver.on_error(on_err);
+        _addr_resolver.on_resolve([this](addrinfo* ai) {
+            _udp.init(ai->ai_addrlen, ai->ai_addr,true);
+            error_c ret = _loop->execute(&_udp);
+            if (ret) { on_error(ret,_name);
+            } else {
+                _is_writeable = true;
+                log::debug()<<"on connect broadcast ok"<<std::endl;
+                if (_on_connect) { _on_connect();
+                }
+            }
+        });
+        _addr_resolver.init_resolving_broadcast(port,loop,interface);
     }
 
     void on_read(OnReadFunc func) {
@@ -173,21 +210,25 @@ std::unique_ptr<UdpClient> UdpClient::create(const std::string& name) {
 class UdpServerImpl : public UdpServer {
 public:
     UdpServerImpl(const std::string& name):_name(name) {};
-    void init(int port, IOLoop* loop, const std::string& host_or_interface="") override {
+    void init(int port, IOLoop* loop, const std::string& host_or_interface="", bool broadcast=false) override {
         _loop = loop;
         auto on_err = [this](error_c& ec){ on_error(ec,_name);};
         _udp.on_error(on_err);
         _addr_resolver.on_error(on_err);
-        _addr_resolver.on_resolve([this](addrinfo* ai) {
+        _addr_resolver.on_resolve([this,broadcast](addrinfo* ai) {
+            _udp._broadcast = broadcast;
             _udp.init(ai->ai_addrlen, ai->ai_addr);
             error_c ret = _loop->execute(&_udp);
-            if (ret) { on_error(ret,"udp client");
+            if (ret) { on_error(ret,"udp server");
             } else {
                 _is_writeable = true;
-                log::debug()<<"on connect ok"<<std::endl;
             }
         });
-        _addr_resolver.init_resolving_server(port,_loop,host_or_interface);
+        if (broadcast) {
+            _addr_resolver.init_resolving_broadcast(port,_loop,host_or_interface);
+        } else {
+            _addr_resolver.init_resolving_server(port,_loop,host_or_interface);
+        }
     }
     int write(const void* buf, int len) override {
         log::debug()<<"svr write"<<std::endl;

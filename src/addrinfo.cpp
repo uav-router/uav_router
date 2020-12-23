@@ -4,6 +4,9 @@
 #include <sys/epoll.h>
 #include <sys/signalfd.h>
 #include <ifaddrs.h>
+#include <linux/if_link.h>
+#include <sys/ioctl.h>
+#include <net/if.h>
 
 #include <chrono>
 using namespace std::chrono_literals;
@@ -168,9 +171,9 @@ public:
 
     void init_resolving_server(int port, IOLoop* loop, const std::string& host_or_interface="") {
         _loop = loop;
-        addrinfo ai;
-        memset(&ai, 0, sizeof(ai));
         if (host_or_interface.empty()) {
+            addrinfo ai;
+            memset(&ai, 0, sizeof(ai));
             struct sockaddr_in addr;
             memset(&addr, 0, sizeof(addr));
             addr.sin_family    = AF_INET; // IPv4 
@@ -181,22 +184,96 @@ public:
             if (_on_resolve) _on_resolve(&ai);
             return;
         }
+        if (host_or_interface=="<loopback>") {
+            addrinfo ai;
+            memset(&ai, 0, sizeof(ai));
+            struct sockaddr_in addr;
+            memset(&addr, 0, sizeof(addr));
+            addr.sin_family    = AF_INET; // IPv4 
+            addr.sin_addr.s_addr = INADDR_LOOPBACK; 
+            addr.sin_port = htons(port);
+            ai.ai_addr = (sockaddr*)&addr;
+            ai.ai_addrlen = sizeof(addr);
+            if (_on_resolve) _on_resolve(&ai);
+            return;
+        }
         ifaddrs *ifaddr;
         errno_c ret = getifaddrs(&ifaddr);
         if (ret) { on_error(ret,"getifaddrs");
         } else {
+            addrinfo *info = nullptr;
+            addrinfo *ptr = nullptr;
             for (ifaddrs *ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
                 if (ifa->ifa_addr == NULL) continue;
                 if (host_or_interface==std::string(ifa->ifa_name) 
                     && ifa->ifa_addr->sa_family==AF_INET) {
-                        ai.ai_addr = ifa->ifa_addr;
-                        ai.ai_addrlen = sizeof(sockaddr_in);
-                        if (_on_resolve) _on_resolve(&ai);
-                        return;
+                        addrinfo* ai = (addrinfo*)alloca(sizeof(addrinfo));
+                        if (info==nullptr) { ptr = info = ai;
+                            ptr->ai_next = ai;
+                            ptr = ai;
+                        }
+                        ai->ai_addr = ifa->ifa_addr;
+                        ai->ai_addrlen = sizeof(sockaddr_in);
                 }
             }
+            if (info && _on_resolve) _on_resolve(info);
+            freeifaddrs(ifaddr);
         }
         init_resolving_client(host_or_interface,port,loop);
+    }
+
+    void init_resolving_broadcast(int port, IOLoop* loop, const std::string& interface) {
+        _loop = loop;
+        if (interface.empty()) {
+            addrinfo ai;
+            memset(&ai, 0, sizeof(ai));
+            struct sockaddr_in addr;
+            memset(&addr, 0, sizeof(addr));
+            addr.sin_family    = AF_INET; // IPv4 
+            addr.sin_addr.s_addr = INADDR_ANY; 
+            addr.sin_port = htons(port);
+            ai.ai_addr = (sockaddr*)&addr;
+            ai.ai_addrlen = sizeof(addr);
+            if (_on_resolve) _on_resolve(&ai);
+            return;
+        }
+        if (interface=="<broadcast>") {
+            addrinfo ai;
+            memset(&ai, 0, sizeof(ai));
+            struct sockaddr_in addr;
+            memset(&addr, 0, sizeof(addr));
+            addr.sin_family    = AF_INET; // IPv4 
+            addr.sin_addr.s_addr = INADDR_BROADCAST; 
+            addr.sin_port = htons(port);
+            ai.ai_addr = (sockaddr*)&addr;
+            ai.ai_addrlen = sizeof(addr);
+            if (_on_resolve) _on_resolve(&ai);
+            return;
+        }
+        ifaddrs *ifaddr;
+        errno_c ret = getifaddrs(&ifaddr);
+        if (ret) { on_error(ret,"getifaddrs");
+        } else {
+            addrinfo *info = nullptr;
+            addrinfo *ptr = nullptr;
+            for (ifaddrs *ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
+                if (ifa->ifa_addr == NULL) continue;
+                if (interface==std::string(ifa->ifa_name) 
+                    && ifa->ifa_addr->sa_family==AF_INET
+                    && ifa->ifa_flags | IFF_BROADCAST) {
+                        addrinfo* ai = (addrinfo*)alloca(sizeof(addrinfo));
+                        if (info==nullptr) { ptr = info = ai;
+                            ptr->ai_next = ai;
+                            ptr = ai;
+                        }
+                        ai->ai_addr = ifa->ifa_broadaddr;
+                        ai->ai_addrlen = sizeof(sockaddr_in);
+                }
+            }
+            if (info && _on_resolve) _on_resolve(info);
+            else log::error()<<"No broadcast address found on "<<interface<<std::endl;
+            freeifaddrs(ifaddr);
+        }
     }
     
     void start_address_resolving() {
@@ -238,6 +315,10 @@ void AddressResolver::init_resolving_client(const std::string& host, int port, I
 
 void AddressResolver::init_resolving_server(int port, IOLoop* loop, const std::string& host_or_interface) {
     _impl->init_resolving_server(port,loop,host_or_interface);
+}
+
+void AddressResolver::init_resolving_broadcast(int port, IOLoop* loop, const std::string& interface) {
+    _impl->init_resolving_broadcast(port,loop,interface);
 }
 
 void AddressResolver::on_resolve(AddressResolver::callback_t func) {
