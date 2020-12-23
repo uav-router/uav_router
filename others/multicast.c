@@ -16,14 +16,18 @@ just one host and as a receiver on all the other hosts
 #include <arpa/inet.h>
 #include <time.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <strings.h>
 
 #define EXAMPLE_PORT 6000
 #define EXAMPLE_GROUP "239.0.0.1"
 
-main(int argc)
+main(int argc, char**)
 {
    struct sockaddr_in addr;
-   int addrlen, sock, cnt;
+   int sock, cnt;
+   socklen_t addrlen;
    struct ip_mreq mreq;
    char message[50];
 
