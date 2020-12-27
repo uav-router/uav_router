@@ -1,12 +1,14 @@
 #include <unistd.h>
 #include <string.h>
 #include <signal.h>
+#include <ifaddrs.h>
 #include <sys/epoll.h>
 #include <sys/signalfd.h>
-#include <ifaddrs.h>
-#include <linux/if_link.h>
 #include <sys/ioctl.h>
+
+#include <linux/if_link.h>
 #include <net/if.h>
+#include <arpa/inet.h>
 
 #include <chrono>
 using namespace std::chrono_literals;
@@ -27,41 +29,8 @@ public:
     error_c start_with(IOLoop* loop) override;
     int epollIN() override;
     void cleanup() override;
+    void on_result(addrinfo* ai, std::error_code& ec);
 private:
-    class AddrInfoImpl;
-    std::unique_ptr<AddrInfoImpl> _impl;
-};
-
-
-class AddrInfo::AddrInfoImpl {
-public:
-    AddrInfoImpl() {
-        _hints.ai_family = AF_UNSPEC;
-        _hints.ai_socktype = 0;
-        _hints.ai_protocol = 0;
-        _hints.ai_flags = AI_V4MAPPED | AI_ADDRCONFIG;
-    }
-    void init(const std::string& name, const std::string& port, 
-             int family, int socktype, int protocol, int flags) {
-        _name = name; 
-        _port = port;
-        _hints.ai_family = family;
-        _hints.ai_socktype = socktype;
-        _hints.ai_protocol = 0;
-        _hints.ai_flags = AI_V4MAPPED | AI_ADDRCONFIG;
-        req.ar_name = _name.c_str();
-        if (_port.empty()) {
-            req.ar_service = 0;
-        } else {
-            req.ar_service = _port.c_str();
-        }
-        req.ar_request = &_hints;
-        se.sigev_notify = SIGEV_SIGNAL;
-        se.sigev_signo = SIGUSR1;
-    }
-    void on_result(addrinfo* ai, std::error_code& ec) {
-        if (_on_result) _on_result(ai,ec);
-    }
     std::string _name;
     std::string _port;
     addrinfo _hints;
@@ -73,17 +42,42 @@ public:
     IOLoop* _loop;
 };
 
-AddrInfo::AddrInfo():IOPollable("addrinfo"),_impl{new AddrInfoImpl{}} {}
+
+
+AddrInfo::AddrInfo():IOPollable("addrinfo") {
+    _hints.ai_family = AF_UNSPEC;
+    _hints.ai_socktype = 0;
+    _hints.ai_protocol = 0;
+    _hints.ai_flags = AI_V4MAPPED | AI_ADDRCONFIG;
+}
 
 AddrInfo::~AddrInfo() {}
 
 void AddrInfo::init(const std::string& name, const std::string& port, 
-         int family, int socktype, int protocol, int flags) {
-    _impl->init(name, port, family, socktype, protocol, flags);
+                    int family, int socktype, int protocol, int flags) {
+    _name = name; 
+    _port = port;
+    _hints.ai_family = family;
+    _hints.ai_socktype = socktype;
+    _hints.ai_protocol = 0;
+    _hints.ai_flags = AI_V4MAPPED | AI_ADDRCONFIG;
+    req.ar_name = _name.c_str();
+    if (_port.empty()) {
+        req.ar_service = 0;
+    } else {
+        req.ar_service = _port.c_str();
+    }
+    req.ar_request = &_hints;
+    se.sigev_notify = SIGEV_SIGNAL;
+    se.sigev_signo = SIGUSR1;
+}
+
+void AddrInfo::on_result(addrinfo* ai, std::error_code& ec) {
+    if (_on_result) _on_result(ai,ec);
 }
 
 void AddrInfo::on_result_func(callback_t func) {
-    _impl->_on_result = func;
+    _on_result = func;
 }
 
 error_c AddrInfo::start_with(IOLoop* loop) {
@@ -95,24 +89,24 @@ error_c AddrInfo::start_with(IOLoop* loop) {
         ret.add_place("sigprocmask");
         return ret;
     }
-    _impl->_sfd = signalfd(-1, &mask, SFD_NONBLOCK);
-    if (_impl->_sfd == -1) {
+    _sfd = signalfd(-1, &mask, SFD_NONBLOCK);
+    if (_sfd == -1) {
         return errno_c("signalfd");
     }
-    _impl->_loop = loop;
-    ret = loop->add(_impl->_sfd, EPOLLIN, this);
+    _loop = loop;
+    ret = _loop->add(_sfd, EPOLLIN, this);
     if (ret) {
         ret.add_place("IOLoop add");
-        close(_impl->_sfd);
+        close(_sfd);
         return ret;
     }
-    _impl->se.sigev_value.sival_ptr = this;
-    gaicb * ptr = &_impl->req;
-    eai_code ec = getaddrinfo_a(GAI_NOWAIT, &ptr, 1, &_impl->se);
+    se.sigev_value.sival_ptr = this;
+    gaicb * ptr = &req;
+    eai_code ec = getaddrinfo_a(GAI_NOWAIT, &ptr, 1, &se);
     if (on_error(ec, "getaddrinfo")) {
-        ret = loop->del(_impl->_sfd, this);
+        ret = _loop->del(_sfd, this);
         on_error(ret,"IOLoop del");
-        close(_impl->_sfd);
+        close(_sfd);
         return ec;
     }
     log::debug()<<"start_with ends"<<std::endl;
@@ -122,7 +116,7 @@ error_c AddrInfo::start_with(IOLoop* loop) {
 int AddrInfo::epollIN() {
     while(true) {
         signalfd_siginfo fdsi;
-        ssize_t s = read(_impl->_sfd, &fdsi, sizeof(fdsi));
+        ssize_t s = read(_sfd, &fdsi, sizeof(fdsi));
         if (s==-1) {
             errno_c err;
             if (err == std::error_condition(std::errc::resource_unavailable_try_again)) break;
@@ -141,11 +135,11 @@ int AddrInfo::epollIN() {
             log::error()<<"AddrInfo->Wrong signal code "<<fdsi.ssi_code<<std::endl;
             continue;
         }
-        error_c ec = eai_code(&_impl->req);
-        _impl->on_result(_impl->req.ar_result, ec);
-        if (_impl->req.ar_result) { freeaddrinfo(_impl->req.ar_result);
+        error_c ec = eai_code(&req);
+        on_result(req.ar_result, ec);
+        if (req.ar_result) { freeaddrinfo(req.ar_result);
         }
-        _impl->_loop->del(_impl->_sfd, this);
+        _loop->del(_sfd, this);
         cleanup();
         break;
     }
@@ -153,13 +147,18 @@ int AddrInfo::epollIN() {
 }
 
 void AddrInfo::cleanup() {
-    close(_impl->_sfd);
+    close(_sfd);
     log::debug()<<"Cleanup called"<<std::endl;
 }
 
-class AddressResolver::AddressResolverImpl : public error_handler {
+class AddressResolverImpl : public AddressResolver {
 public:
-    void init_resolving_client(const std::string& host, int port, IOLoop* loop) {
+
+    void on_resolve(callback_t func) override {
+        _on_resolve = func;
+    }
+
+    void init_resolving_client(const std::string& host, uint16_t port, IOLoop* loop) override {
         std::string port_ = std::to_string(port);
         _ai.init(host,port_,AF_INET,SOCK_DGRAM,IPPROTO_UDP);
         _loop = loop;
@@ -169,110 +168,91 @@ public:
         start_address_resolving();
     }
 
-    void init_resolving_server(int port, IOLoop* loop, const std::string& host_or_interface="") {
+    void resolve_ipv4(in_addr_t address, uint16_t port) {
+        addrinfo ai;
+        memset(&ai, 0, sizeof(ai));
+        sockaddr_in addr;
+        memset(&addr, 0, sizeof(addr));
+        addr.sin_family    = AF_INET; // IPv4 
+        addr.sin_addr.s_addr = address; 
+        addr.sin_port = htons(port);
+        ai.ai_addr = (sockaddr*)&addr;
+        ai.ai_addrlen = sizeof(addr);
+        if (_on_resolve) _on_resolve(&ai);
+    }
+
+    error_c resolve_ip4(const std::string& address, uint16_t port) override {
+        in_addr addr;
+        int ret = inet_pton(AF_INET,address.c_str(),&addr);
+        if (ret==1) {
+            resolve_ipv4(addr.s_addr,port);
+            return error_c();
+        }
+        if (ret==0) return errno_c(EINVAL,"inet_pton"); //address is not like XXX.XXX.XXX
+        return errno_c("inet_pton");
+    }
+
+    error_c resolve_interface_ip4(const std::string& interface, uint16_t port, Interface type) override {
+        ifaddrs *ifaddr;
+        error_c ret = err_chk(getifaddrs(&ifaddr),"getifaddrs");
+        if (ret) return ret;
+
+        addrinfo *info = nullptr;
+        addrinfo *ptr = nullptr;
+        for (ifaddrs *ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
+            if (ifa->ifa_addr->sa_family != AF_INET) continue;
+            if (type==Interface::BROADCAST && !(ifa->ifa_flags | IFF_BROADCAST)) continue;
+            if (ifa->ifa_addr == NULL) continue;
+            if (interface==std::string(ifa->ifa_name)) {
+                addrinfo* ai = (addrinfo*)alloca(sizeof(addrinfo));
+                if (info==nullptr) { ptr = info = ai;
+                    ptr->ai_next = ai;
+                    ptr = ai;
+                }
+                ai->ai_addrlen = sizeof(sockaddr_in);
+                switch(type) {
+                    case Interface::ADDRESS:   ai->ai_addr = ifa->ifa_addr;      break;
+                    case Interface::BROADCAST: ai->ai_addr = ifa->ifa_broadaddr; break;
+                }
+            }
+        }
+        if (info) { 
+            if (_on_resolve) _on_resolve(info);
+            freeifaddrs(ifaddr);
+            return error_c();
+        }
+        return error_c(ENODATA);
+    }
+
+    void init_resolving_server(uint16_t port, IOLoop* loop, const std::string& host_or_interface="") override {
         _loop = loop;
         if (host_or_interface.empty()) {
-            addrinfo ai;
-            memset(&ai, 0, sizeof(ai));
-            struct sockaddr_in addr;
-            memset(&addr, 0, sizeof(addr));
-            addr.sin_family    = AF_INET; // IPv4 
-            addr.sin_addr.s_addr = INADDR_ANY; 
-            addr.sin_port = htons(port);
-            ai.ai_addr = (sockaddr*)&addr;
-            ai.ai_addrlen = sizeof(addr);
-            if (_on_resolve) _on_resolve(&ai);
+            resolve_ipv4(INADDR_ANY, port);
             return;
         }
         if (host_or_interface=="<loopback>") {
-            addrinfo ai;
-            memset(&ai, 0, sizeof(ai));
-            struct sockaddr_in addr;
-            memset(&addr, 0, sizeof(addr));
-            addr.sin_family    = AF_INET; // IPv4 
-            addr.sin_addr.s_addr = INADDR_LOOPBACK; 
-            addr.sin_port = htons(port);
-            ai.ai_addr = (sockaddr*)&addr;
-            ai.ai_addrlen = sizeof(addr);
-            if (_on_resolve) _on_resolve(&ai);
+            resolve_ipv4(INADDR_LOOPBACK, port);
             return;
         }
-        ifaddrs *ifaddr;
-        errno_c ret = getifaddrs(&ifaddr);
-        if (ret) { on_error(ret,"getifaddrs");
-        } else {
-            addrinfo *info = nullptr;
-            addrinfo *ptr = nullptr;
-            for (ifaddrs *ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
-                if (ifa->ifa_addr == NULL) continue;
-                if (host_or_interface==std::string(ifa->ifa_name) 
-                    && ifa->ifa_addr->sa_family==AF_INET) {
-                        addrinfo* ai = (addrinfo*)alloca(sizeof(addrinfo));
-                        if (info==nullptr) { ptr = info = ai;
-                            ptr->ai_next = ai;
-                            ptr = ai;
-                        }
-                        ai->ai_addr = ifa->ifa_addr;
-                        ai->ai_addrlen = sizeof(sockaddr_in);
-                }
-            }
-            if (info && _on_resolve) _on_resolve(info);
-            freeifaddrs(ifaddr);
+        error_c ret = resolve_interface_ip4(host_or_interface, port, Interface::ADDRESS);
+        if (ret) {
+            init_resolving_client(host_or_interface,port,loop);
         }
-        init_resolving_client(host_or_interface,port,loop);
     }
 
-    void init_resolving_broadcast(int port, IOLoop* loop, const std::string& interface) {
+    void init_resolving_broadcast(uint16_t port, IOLoop* loop, const std::string& interface) override {
         _loop = loop;
         if (interface.empty()) {
-            addrinfo ai;
-            memset(&ai, 0, sizeof(ai));
-            struct sockaddr_in addr;
-            memset(&addr, 0, sizeof(addr));
-            addr.sin_family    = AF_INET; // IPv4 
-            addr.sin_addr.s_addr = INADDR_ANY; 
-            addr.sin_port = htons(port);
-            ai.ai_addr = (sockaddr*)&addr;
-            ai.ai_addrlen = sizeof(addr);
-            if (_on_resolve) _on_resolve(&ai);
+            resolve_ipv4(INADDR_ANY, port);
             return;
         }
         if (interface=="<broadcast>") {
-            addrinfo ai;
-            memset(&ai, 0, sizeof(ai));
-            struct sockaddr_in addr;
-            memset(&addr, 0, sizeof(addr));
-            addr.sin_family    = AF_INET; // IPv4 
-            addr.sin_addr.s_addr = INADDR_BROADCAST; 
-            addr.sin_port = htons(port);
-            ai.ai_addr = (sockaddr*)&addr;
-            ai.ai_addrlen = sizeof(addr);
-            if (_on_resolve) _on_resolve(&ai);
+            resolve_ipv4(INADDR_BROADCAST, port);
             return;
         }
-        ifaddrs *ifaddr;
-        errno_c ret = getifaddrs(&ifaddr);
-        if (ret) { on_error(ret,"getifaddrs");
-        } else {
-            addrinfo *info = nullptr;
-            addrinfo *ptr = nullptr;
-            for (ifaddrs *ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
-                if (ifa->ifa_addr == NULL) continue;
-                if (interface==std::string(ifa->ifa_name) 
-                    && ifa->ifa_addr->sa_family==AF_INET
-                    && ifa->ifa_flags | IFF_BROADCAST) {
-                        addrinfo* ai = (addrinfo*)alloca(sizeof(addrinfo));
-                        if (info==nullptr) { ptr = info = ai;
-                            ptr->ai_next = ai;
-                            ptr = ai;
-                        }
-                        ai->ai_addr = ifa->ifa_broadaddr;
-                        ai->ai_addrlen = sizeof(sockaddr_in);
-                }
-            }
-            if (info && _on_resolve) _on_resolve(info);
-            else log::error()<<"No broadcast address found on "<<interface<<std::endl;
-            freeifaddrs(ifaddr);
+        error_c ret = resolve_interface_ip4(interface, port, Interface::BROADCAST);
+        if (ret) {
+            log::error()<<"No broadcast address found on "<<interface<<std::endl;
         }
     }
     
@@ -299,28 +279,10 @@ public:
     IOLoop *_loop;
     AddrInfo _ai;
     Timer _timer;
-    AddressResolver::callback_t _on_resolve;
+    callback_t _on_resolve;
 };
 
-AddressResolver::AddressResolver():_impl{new AddressResolverImpl{}} {
-    auto err = [this](error_c& ec){ on_error(ec,"AddressResolver"); };
-    _impl->_ai.on_error(err);
-    _impl->_timer.on_error(err);
-}
-AddressResolver::~AddressResolver() {}
-
-void AddressResolver::init_resolving_client(const std::string& host, int port, IOLoop* loop) {
-    _impl->init_resolving_client(host,port,loop);
+std::unique_ptr<AddressResolver> AddressResolver::create() {
+    return std::unique_ptr<AddressResolver>{new AddressResolverImpl()};
 }
 
-void AddressResolver::init_resolving_server(int port, IOLoop* loop, const std::string& host_or_interface) {
-    _impl->init_resolving_server(port,loop,host_or_interface);
-}
-
-void AddressResolver::init_resolving_broadcast(int port, IOLoop* loop, const std::string& interface) {
-    _impl->init_resolving_broadcast(port,loop,interface);
-}
-
-void AddressResolver::on_resolve(AddressResolver::callback_t func) {
-    _impl->_on_resolve = func;
-}
