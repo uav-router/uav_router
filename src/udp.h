@@ -7,8 +7,9 @@
 
 class UdpClient : public IOWriteable, public error_handler {
 public:
-    virtual void init(const std::string& host, int port, IOLoop* loop) = 0;
-    virtual void init_broadcast(int port, IOLoop* loop, const std::string& interface="") = 0;
+    virtual void init(const std::string& host, uint16_t port, IOLoop* loop) = 0;
+    virtual void init_broadcast(uint16_t port, IOLoop* loop, const std::string& interface="") = 0;
+    virtual void init_multicast(const std::string& address, uint16_t port, IOLoop* loop, const std::string& interface="", int ttl = 0) = 0;
     virtual void on_read(OnReadFunc func) = 0;
     virtual void on_connect(OnEventFunc func) = 0;
     static std::unique_ptr<UdpClient> create(const std::string& name);
@@ -16,7 +17,8 @@ public:
 
 class UdpServer : public IOWriteable, public error_handler {
 public:
-    virtual void init(int port, IOLoop* loop, const std::string& host_or_interface="", bool broadcast=false) = 0;
+    virtual void init(uint16_t port, IOLoop* loop, const std::string& host_or_interface="", bool broadcast=false) = 0;
+    virtual void init_multicast(const std::string& address, uint16_t port, IOLoop* loop, const std::string& interface="") = 0;
     virtual void on_read(OnReadFunc func) = 0;
     static std::unique_ptr<UdpServer> create(const std::string& name);
 };
