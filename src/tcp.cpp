@@ -44,7 +44,7 @@ public:
         int ret = send(_fd, buf, len, 0);
         if (ret==-1) {
             errno_c err;
-            on_error(err, "UDP send datagram");
+            on_error(err, "TCP send datagram");
             is_writeable=false;
         } else if (ret != len) {
             log::error()<<"Partial send "<<ret<<" from "<<len<<" bytes"<<std::endl;
@@ -157,18 +157,18 @@ private:
 
 class TcpClientImpl : public TcpClient {
 public:
-    TcpClientImpl(const std::string& name):_name(name) {}
-    void init(const std::string& host, int port, IOLoop* loop) override {
+    TcpClientImpl(const std::string& name):_name(name),_addr_resolver{AddressResolver::create()} {}
+    void init(const std::string& host, uint16_t port, IOLoop* loop) override {
         auto on_err = [this](error_c& ec){ on_error(ec,_name);};
         _tcp.on_error(on_err);
-        _addr_resolver.on_error(on_err);
-        _addr_resolver.on_resolve([this](addrinfo* ai) {
+        _addr_resolver->on_error(on_err);
+        _addr_resolver->on_resolve([this](addrinfo* ai) {
             _tcp.init(ai->ai_addrlen, ai->ai_addr);
             error_c ret = _loop->execute(&_tcp);
             if (ret) { on_error(ret,_name);
             }
         });
-        _addr_resolver.init_resolving_client(host,port,loop);
+        _addr_resolver->init_resolving_client(host,port,loop);
         _loop = loop;
     }
     void on_read(OnReadFunc func) override {
@@ -190,7 +190,7 @@ public:
     std::string _name;
     IOLoop *_loop;
     TcpClientBase _tcp;
-    AddressResolver _addr_resolver;
+    std::unique_ptr<AddressResolver> _addr_resolver;
 };
 
 std::unique_ptr<TcpClient> TcpClient::create(const std::string& name) {
@@ -425,19 +425,19 @@ private:
 
 class TcpServerImpl : public TcpServer {
 public:
-    TcpServerImpl(const std::string& name):_name(name) {};
-    void init(int port, IOLoop* loop, const std::string& host_or_interface="") override {
+    TcpServerImpl(const std::string& name):_name(name),_addr_resolver{AddressResolver::create()} {};
+    void init(uint16_t port, IOLoop* loop, const std::string& host_or_interface="") override {
         _loop = loop;
         auto on_err = [this](error_c& ec){ on_error(ec,_name);};
         _tcp.on_error(on_err);
-        _addr_resolver.on_error(on_err);
-        _addr_resolver.on_resolve([this](addrinfo* ai) {
+        _addr_resolver->on_error(on_err);
+        _addr_resolver->on_resolve([this](addrinfo* ai) {
             _tcp.init(ai->ai_addrlen, ai->ai_addr);
             error_c ret = _loop->execute(&_tcp);
             if (ret) { on_error(ret,"tcp client");
             }
         });
-        _addr_resolver.init_resolving_server(port,_loop,host_or_interface);
+        _addr_resolver->init_resolving_server(port,_loop,host_or_interface);
     }
     void on_connect(OnConnectFunc func) override {
         _tcp.on_connect(func);
@@ -448,7 +448,7 @@ public:
 private:
     std::string _name;
     IOLoop *_loop;
-    AddressResolver _addr_resolver;
+    std::unique_ptr<AddressResolver> _addr_resolver;
     TcpServerBase _tcp;
 };
 

@@ -19,6 +19,15 @@ using namespace std::chrono_literals;
 #include "uart.h"
 #include "timer.h"
 
+struct FD {
+    int* _fd;
+    FD(int& fd): _fd(&fd) {}
+    ~FD() {
+        if (_fd && *_fd!=-1) close(*_fd);
+    }
+    void clear() {_fd=nullptr;}
+};
+
 std::map<int, speed_t> bauds = {
     {0,      B0},
     {50,     B50},
@@ -80,21 +89,12 @@ public:
         ret = _loop->add(_fd, EPOLLIN | EPOLLOUT | EPOLLET, this);
         on_error(ret,"uart loop add");
     }
-    
-    struct FD {
-        int _fd;
-        FD(int fd=-1): _fd(fd) {}
-        ~FD() {
-            if (_fd!=-1) close(_fd);
-        }
-        void clear() {_fd=-1;}
-    };
 
     error_c init_uart() {
+        FD watcher(_fd);
         _fd = ::open(_path.c_str(), O_RDWR|O_NONBLOCK|O_CLOEXEC|O_NOCTTY);
         if (_fd == -1) { return errno_c("uart "+_path+" open");
         }
-        FD watcher(_fd);
         const auto& b = bauds.find(_baudrate);
         if (b == bauds.end()) return errno_c(EINVAL,"uart "+_path+" open");
         struct termios tty;
