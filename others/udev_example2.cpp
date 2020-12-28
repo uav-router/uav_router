@@ -23,6 +23,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <string>
 #include <libudev.h>
 
 #define BLOCK_SIZE 512
@@ -48,7 +49,7 @@ int main()
         return 1;
     }
 
-    udev_enumerate_add_match_subsystem(enumerate, "block");
+    udev_enumerate_add_match_subsystem(enumerate, "tty");
     udev_enumerate_scan_devices(enumerate);
 
     /* fillup device list */
@@ -67,14 +68,22 @@ int main()
         dev = udev_device_new_from_syspath(udev, path);
 
         /* skip if device/disk is a partition or loop device */
-        if (strncmp(udev_device_get_devtype(dev), "partition", 9) != 0 &&
-            strncmp(udev_device_get_sysname(dev), "loop", 4) != 0) {
+        //if (strncmp(udev_device_get_devtype(dev), "partition", 9) != 0 &&
+        //    strncmp(udev_device_get_sysname(dev), "loop", 4) != 0) {
             printf("I: DEVNODE=%s\n", udev_device_get_devnode(dev));
-            printf("I: KERNEL=%s\n", udev_device_get_sysname(dev));
-            printf("I: DEVPATH=%s\n", udev_device_get_devpath(dev));
-            printf("I: DEVTYPE=%s\n", udev_device_get_devtype(dev));
+            //printf("I: KERNEL=%s\n", udev_device_get_sysname(dev));
+            //printf("I: DEVPATH=%s\n", udev_device_get_devpath(dev));
+            //printf("I: DEVTYPE=%s\n", udev_device_get_devtype(dev));
+            struct udev_list_entry *list_entry;
 
-            tmp = udev_device_get_sysattr_value(dev, "size");
+            udev_list_entry_foreach(list_entry, udev_device_get_devlinks_list_entry(dev)) {
+                if (!udev_list_entry_get_name(list_entry)) continue;
+                std::string link = udev_list_entry_get_name(list_entry);
+                if (link.rfind("/dev/serial/by-id/",0)==0) {
+                    printf("id:%s\n", link.c_str());
+                }
+            }
+            /*tmp = udev_device_get_sysattr_value(dev, "size");
             if (tmp)
                 disk_size = strtoull(tmp, NULL, 10);
 
@@ -86,8 +95,8 @@ int main()
             if (strncmp(udev_device_get_sysname(dev), "sr", 2) != 0)
                 printf("%lld GB\n", (disk_size * block_size) / 1000000000);
             else
-                printf("n/a\n");
-        }
+                printf("n/a\n");*/
+        //}
 
         /* free dev */
         udev_device_unref(dev);

@@ -20,6 +20,7 @@
  */
 
 #include <cstdio>
+#include <string>
 #include <unistd.h>
 #include <libudev.h>
 
@@ -38,7 +39,7 @@ int main()
     }
 
     mon = udev_monitor_new_from_netlink(udev, "udev");
-    udev_monitor_filter_add_match_subsystem_devtype(mon, "net", NULL);
+    udev_monitor_filter_add_match_subsystem_devtype(mon, "tty", NULL);
     udev_monitor_enable_receiving(mon);
     fd = udev_monitor_get_fd(mon);
 
@@ -57,9 +58,18 @@ int main()
             dev = udev_monitor_receive_device(mon);
             if (dev) {
                 printf("I: ACTION=%s\n", udev_device_get_action(dev));
-                printf("I: DEVNAME=%s\n", udev_device_get_sysname(dev));
-                printf("I: DEVPATH=%s\n", udev_device_get_devpath(dev));
-                printf("I: MACADDR=%s\n", udev_device_get_sysattr_value(dev, "address"));
+                //printf("I: DEVNAME=%s\n", udev_device_get_sysname(dev));
+                //printf("I: DEVPATH=%s\n", udev_device_get_devpath(dev));
+                printf("I: DEVNODE=%s\n", udev_device_get_devnode(dev));
+                //printf("I: MACADDR=%s\n", udev_device_get_sysattr_value(dev, "address"));
+                struct udev_list_entry *list_entry;
+                udev_list_entry_foreach(list_entry, udev_device_get_devlinks_list_entry(dev)) {
+                    if (!udev_list_entry_get_name(list_entry)) continue;
+                    std::string link = udev_list_entry_get_name(list_entry);
+                    if (link.rfind("/dev/serial/by-id/",0)==0) {
+                        printf("id:%s\n", link.c_str());
+                    }
+                }
                 printf("---\n");
 
                 /* free dev */
@@ -67,7 +77,7 @@ int main()
             }
         }
         /* 500 milliseconds */
-        usleep(500*1000);
+        //usleep(500*1000);
     }
     /* free udev */
     udev_unref(udev);

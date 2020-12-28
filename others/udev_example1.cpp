@@ -20,8 +20,9 @@
  *
  */
 
-#include <stdio.h>
+#include <cstdio>
 #include <libudev.h>
+#include <string>
 
 #define SYSPATH "/sys/class/net"
 
@@ -55,15 +56,23 @@ int main(int argc, char *argv[])
         return 1;
     }
     
-    printf("I: DEVNAME=%s\n", udev_device_get_sysname(dev));
-    printf("I: DEVPATH=%s\n", udev_device_get_devpath(dev));
+    //printf("I: DEVNAME=%s\n", udev_device_get_sysname(dev));
+    //printf("I: DEVPATH=%s\n", udev_device_get_devpath(dev));
     //printf("I: MACADDR=%s\n", udev_device_get_sysattr_value(dev, "address"));
     printf("I: DEVNODE=%s\n", udev_device_get_devnode(dev));
     
-    dev_parent = udev_device_get_parent(dev);
-    if (dev_parent)
-        printf("I: DRIVER=%s\n", udev_device_get_driver(dev_parent));
+    //dev_parent = udev_device_get_parent(dev);
+    //if (dev_parent)
+    //    printf("I: DRIVER=%s\n", udev_device_get_driver(dev_parent));
+    struct udev_list_entry *list_entry;
 
+    udev_list_entry_foreach(list_entry, udev_device_get_devlinks_list_entry(dev)) {
+        if (!udev_list_entry_get_name(list_entry)) continue;
+        std::string link = udev_list_entry_get_name(list_entry);
+        if (link.rfind("/dev/serial/by-id/",0)==0) {
+            printf("id:%s\n", link.c_str());
+        }
+    }
     /* free dev */
     udev_device_unref(dev);
 

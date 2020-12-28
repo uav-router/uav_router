@@ -1,13 +1,12 @@
 #include <unistd.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <stddef.h>
-#include <errno.h>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <cstddef>
+#include <cerrno>
 #include <sys/time.h>
 #include <sys/stat.h>
 #include <fcntl.h>
-#include <stdbool.h>
 
 #include <libudev.h>
 
@@ -54,13 +53,14 @@ static int show_device_action(struct udev_device *device)
     {
         struct udev_list_entry *list_entry;
 
-                udev_list_entry_foreach(list_entry, udev_device_get_properties_list_entry(device)) {
-                        if (!udev_list_entry_get_name(list_entry))
-                                continue;
-                        printf("E:%s=%s\n",
-                   udev_list_entry_get_name(list_entry),
-                   udev_list_entry_get_value(list_entry));
-                }
+        udev_list_entry_foreach(list_entry, udev_device_get_properties_list_entry(device)) {
+            if (!udev_list_entry_get_name(list_entry)) continue;
+            printf("E:%s=%s\n", udev_list_entry_get_name(list_entry), udev_list_entry_get_value(list_entry));
+        }
+        udev_list_entry_foreach(list_entry, udev_device_get_devlinks_list_entry(device)) {
+            if (!udev_list_entry_get_name(list_entry)) continue;
+            printf("L:%s\n", udev_list_entry_get_name(list_entry));
+        }
     }
 
     return 0;
