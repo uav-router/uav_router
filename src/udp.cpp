@@ -1,6 +1,6 @@
 #include <unistd.h>
 //#include <fcntl.h>
-#include <string.h>
+#include <cstring>
 #include <sys/epoll.h>
 #include <sys/ioctl.h>
 
@@ -275,13 +275,13 @@ public:
         execute();
     }
 
-    void on_read(OnReadFunc func) {
+    void on_read(OnReadFunc func) override {
         _udp.on_read(func);
     }
-    void on_connect(OnEventFunc func) {
+    void on_connect(OnEventFunc func) override {
         _on_connect = func;
     }
-    int write(const void* buf, int len) { 
+    int write(const void* buf, int len) override {
         if (!_is_writeable) {
             return 0;
         }
@@ -320,7 +320,7 @@ public:
             _addr_resolver->init_resolving_server(port,_loop,host_or_interface);
         }
     }
-    void init_multicast(const std::string& address, uint16_t port, IOLoop* loop, const std::string& interface="") {
+    void init_multicast(const std::string& address, uint16_t port, IOLoop* loop, const std::string& interface="") override {
         _loop = loop;
         log::debug()<<"init multicast started"<<std::endl;
         sockaddr_storage addr;

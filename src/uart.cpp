@@ -2,7 +2,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <strings.h>
-#include <string.h>
+#include <cstring>
 #include <sys/ioctl.h>
 #include <sys/epoll.h>
 #include <unistd.h>
@@ -180,7 +180,7 @@ public:
             close(_fd);
         }
     }
-    int write(const void* buf, int len) {
+    int write(const void* buf, int len) override {
         if (!_is_writeable) return 0;
         ssize_t n = ::write(_fd, buf, len);
         _is_writeable = n==len;

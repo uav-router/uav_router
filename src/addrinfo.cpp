@@ -1,6 +1,6 @@
 #include <unistd.h>
-#include <string.h>
-#include <signal.h>
+#include <cstring>
+#include <csignal>
 #include <ifaddrs.h>
 #include <sys/epoll.h>
 #include <sys/signalfd.h>

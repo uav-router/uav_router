@@ -1,6 +1,6 @@
 #include <unistd.h>
-#include <signal.h>
-#include <string.h>
+#include <csignal>
+#include <cstring>
 #include <sys/epoll.h>
 #include <sys/signalfd.h>
 #include <set>

@@ -12,7 +12,9 @@ def options(opt):
     opt.load('compiler_cxx')
 
 def configure(conf):
+    # waf configure --check-cxx-compiler=clang++
     conf.load('compiler_cxx')
+    conf.load('clang_compilation_database')
     conf.env.CPPFLAGS = ['-g']
 def build(bld):
     sources = bld.path.find_node('src').ant_glob('*.cpp')

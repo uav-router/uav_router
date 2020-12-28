@@ -1,5 +1,5 @@
 #include <unistd.h>
-#include <string.h>
+#include <cstring>
 #include <sys/epoll.h>
 #include <sys/ioctl.h>
 #include <fcntl.h>
@@ -36,7 +36,7 @@ public:
         }
     }
 
-    int write(const void* buf, int len) {
+    int write(const void* buf, int len) override {
         if (!is_writeable) {
             log::debug()<<"write not writable"<<std::endl;
             return 0;
@@ -262,7 +262,7 @@ public:
         }
         return HANDLED;
     }
-    bool epollEvent(int events) {
+    bool epollEvent(int events) override {
         if (events & (EPOLLIN | EPOLLERR)) {
             errno_c err = check();
             if (err || (events & EPOLLERR)) on_error(err,"tcp socket error");
@@ -278,7 +278,7 @@ public:
             close(_fd);
         }
     }
-    int write(const void* buf, int len) {
+    int write(const void* buf, int len) override {
         if (!_is_writeable) return 0;
         ssize_t n = send(_fd, buf, len, 0);
         _is_writeable = n==len;
