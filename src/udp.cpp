@@ -113,7 +113,7 @@ protected:
 class UdpClientBase : public UdpBase {
 public:
     UdpClientBase():UdpBase("udp client") {}
-    virtual error_c start_with(IOLoop* loop) override {
+    error_c start_with(IOLoop* loop) override {
         FD watcher(_fd);
         _fd = socket(AF_INET, SOCK_DGRAM | SOCK_NONBLOCK, 0);
         if (_fd == -1) { return errno_c("udp client socket");
@@ -147,7 +147,7 @@ public:
 class UdpServerBase : public UdpBase {
 public:
     UdpServerBase():UdpBase("udp server") {}
-    virtual error_c start_with(IOLoop* loop) override {
+    error_c start_with(IOLoop* loop) override {
         FD watcher(_fd);
         _fd = socket(AF_INET, SOCK_DGRAM | SOCK_NONBLOCK, 0);
         if (_fd == -1) { return errno_c("udp server socket");

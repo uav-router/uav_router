@@ -1,6 +1,6 @@
 #ifndef __EPOLL_H__
 #define __EPOLL_H__
-#include <stdint.h>
+#include <cstdint>
 #include <memory>
 #include <functional>
 #include <string>
@@ -31,6 +31,8 @@ public:
     virtual int epollERR() { return NOT_HANDLED; }
     virtual int epollRDHUP() { return NOT_HANDLED; }
     virtual int epollHUP() { return NOT_HANDLED; }
+    virtual void udev_add(const std::string& node, const std::string& id) {};
+    virtual void udev_remove(const std::string& node, const std::string& id) {};
     virtual error_c start_with(IOLoop* loop) {return error_c(ENOTSUP);}
     virtual void cleanup() {}
 
@@ -45,6 +47,10 @@ public:
     errno_c add(int fd, uint32_t events, IOPollable* obj);
     errno_c mod(int fd, uint32_t events, IOPollable* obj);
     errno_c del(int fd, IOPollable* obj);
+    void udev_start_watch(IOPollable* obj);
+    void udev_stop_watch(IOPollable* obj);
+    std::string udev_find_id(const std::string& path);
+    std::string udev_find_path(const std::string& id);
     int run();
     void stop();
 private:
