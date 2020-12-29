@@ -15,7 +15,7 @@ def configure(conf):
     # waf configure --check-cxx-compiler=clang++
     conf.load('compiler_cxx')
     conf.load('clang_compilation_database')
-    conf.env.CPPFLAGS = ['-g']
+    conf.env.CPPFLAGS = ['-g','-std=c++17']
 def build(bld):
     sources = bld.path.find_node('src').ant_glob('*.cpp')
     tests_dir = bld.path.find_node('tests')

@@ -5,6 +5,7 @@
 #include <sys/signalfd.h>
 #include <set>
 #include <initializer_list>
+//#include <filesystem>
 #include <libudev.h>
 
 #include "log.h"
@@ -142,14 +143,83 @@ public:
         } else if (_on_action) _on_action(dev);
         return HANDLED;
     }
+    std::string find_link(const std::string& path) {
+        std::string ret;
+        udev_enumerate *enumerate = udev_enumerate_new(_udev);
+        if (!enumerate) return ret;
+        udev_enumerate_add_match_subsystem(enumerate, "tty");
+        udev_enumerate_scan_devices(enumerate);
+        udev_list_entry *devices = udev_enumerate_get_list_entry(enumerate);
+        udev_list_entry *dev_list_entry;
+        bool device_found = false;
+        udev_list_entry_foreach(dev_list_entry, devices) {
+            udev_device *dev = udev_device_new_from_syspath(_udev, udev_list_entry_get_name(dev_list_entry));
+            struct udev_list_entry *list_entry;
+            std::string dev_id;
+            udev_list_entry_foreach(list_entry, udev_device_get_devlinks_list_entry(dev)) {
+                std::string link = udev_list_entry_get_name(list_entry);
+                if (link.rfind("/dev/serial/by-id/",0)==0) {
+                    dev_id = link;
+                }
+                if (!device_found) device_found = link==path;
+            }
+            if (device_found) {
+                ret = dev_id;
+                break;
+            }
+            udev_device_unref(dev);
+        }
+        udev_enumerate_unref(enumerate);
+        return ret;
+    }
+    std::string return_id(udev_device *dev) {
+        std::string ret;
+        udev_list_entry *list_entry;
+        udev_list_entry_foreach(list_entry, udev_device_get_devlinks_list_entry(dev)) {
+            std::string link = udev_list_entry_get_name(list_entry);
+            if (link.rfind("/dev/serial/by-id/",0)==0) {
+                ret = link;
+            }
+        }
+        return ret;
+    }
     std::string find_id(const std::string& path) {
-        udev_device *dev = udev_device_new_from_subsystem_sysname(_udev,"tty",path.c_str());
-        //if (!dev) return std::string();
-        return std::string();
+        std::string sysname = path;
+        auto pos = sysname.rfind("/");
+        if (pos!= std::string::npos) {
+            sysname = sysname.substr(pos+1);
+        }
+        udev_device *dev = udev_device_new_from_subsystem_sysname(_udev,"tty",sysname.c_str());
+        if (!dev) return find_link(path);
+        return return_id(dev);
     }
 
     std::string find_path(const std::string& id) {
-        return std::string();
+        std::string ret;
+        udev_enumerate *enumerate = udev_enumerate_new(_udev);
+        if (!enumerate) return ret;
+        udev_enumerate_add_match_subsystem(enumerate, "tty");
+        udev_enumerate_scan_devices(enumerate);
+        udev_list_entry *devices = udev_enumerate_get_list_entry(enumerate);
+        udev_list_entry *dev_list_entry;
+        bool device_found = false;
+        udev_list_entry_foreach(dev_list_entry, devices) {
+            udev_device *dev = udev_device_new_from_syspath(_udev, udev_list_entry_get_name(dev_list_entry));
+            struct udev_list_entry *list_entry;
+            std::string dev_id;
+            udev_list_entry_foreach(list_entry, udev_device_get_devlinks_list_entry(dev)) {
+                std::string link = udev_list_entry_get_name(list_entry);
+                if (!device_found) device_found = link==id;
+                if (device_found) break;
+            }
+            if (device_found) {
+                ret = udev_device_get_devnode(dev);
+                break;
+            }
+            udev_device_unref(dev);
+        }
+        udev_enumerate_unref(enumerate);
+        return ret;
     }
 
 private:

@@ -53,6 +53,7 @@
         "map": "cpp",
         "unordered_set": "cpp",
         "bitset": "cpp",
-        "iomanip": "cpp"
+        "iomanip": "cpp",
+        "filesystem": "cpp"
     }
 }
