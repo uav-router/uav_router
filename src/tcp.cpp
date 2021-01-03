@@ -134,7 +134,7 @@ public:
             close(_fd);
             return ret;
         }
-        ret = err_chk(connect(_fd,_addr.sockaddr(), _addr.len()),"connect");
+        ret = err_chk(connect(_fd,_addr.sock_addr(), _addr.len()),"connect");
         if (ret && ret!=std::error_condition(std::errc::operation_in_progress)) {
             close(_fd);
             return ret;
@@ -391,7 +391,7 @@ public:
             close(_fd);
             return ret;
         }*/
-        errno_c ret = err_chk(bind(_fd,_addr.sockaddr(), _addr.len()),"connect");
+        errno_c ret = err_chk(bind(_fd,_addr.sock_addr(), _addr.len()),"connect");
         if (ret) { // && ret!=std::error_condition(std::errc::operation_in_progress)) {
             close(_fd);
             return ret;

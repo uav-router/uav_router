@@ -55,7 +55,7 @@ public:
                     break;
                 }
                 void* buffer = alloca(sz);
-                ssize_t n = recvfrom(_fd, buffer, sz, 0, _send_addr.sockaddr(), &_send_addr.size());
+                ssize_t n = recvfrom(_fd, buffer, sz, 0, _send_addr.sock_addr(), &_send_addr.size());
                 if (n<0) {
                     errno_c ret;
                     if (ret != std::error_condition(std::errc::resource_unavailable_try_again)) {
@@ -83,7 +83,7 @@ protected:
         if (!is_writeable) {
             return 0;
         }
-        int ret = sendto(_fd, buf, len, 0, addr.sockaddr(), addr.len());
+        int ret = sendto(_fd, buf, len, 0, addr.sock_addr(), addr.len());
         if (ret==-1) {
             errno_c err;
             on_error(err, "UDP send datagram");
@@ -161,7 +161,7 @@ public:
                 if (ret) return ret;
             }
             SockAddr any(INADDR_ANY, _addr.port());
-            ret = err_chk(bind(_fd, any.sockaddr(), any.len()), "udp server multicast bind");
+            ret = err_chk(bind(_fd, any.sock_addr(), any.len()), "udp server multicast bind");
             if (ret) return ret;
             ip_mreq mreq;
             mreq.imr_multiaddr.s_addr = _addr.ip4_addr_t();
@@ -169,7 +169,7 @@ public:
             ret = err_chk(setsockopt(_fd, IPPROTO_IP, IP_ADD_MEMBERSHIP, &mreq, sizeof(mreq)),"add membership");
             if (ret) return ret;
         } else {
-            error_c ret = err_chk(bind(_fd, _addr.sockaddr(), _addr.len()), "udp server bind");
+            error_c ret = err_chk(bind(_fd, _addr.sock_addr(), _addr.len()), "udp server bind");
             if (ret) return ret;
         }
         error_c ret = loop->add(_fd, EPOLLIN | EPOLLOUT | EPOLLET, this);

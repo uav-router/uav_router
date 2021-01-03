@@ -83,7 +83,7 @@ SockAddr::SockAddr(const std::string& address, uint16_t port):_impl{new SockAddr
     }
 }
 
-auto SockAddr::sockaddr() -> struct sockaddr* {
+auto SockAddr::sock_addr() -> struct sockaddr* {
     if (!_impl) _impl = std::make_unique<SockAddrImpl>();
     return (struct sockaddr*)&(_impl->addr.storage);
 }

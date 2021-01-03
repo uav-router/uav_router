@@ -20,7 +20,7 @@ public:
   void init(addrinfo *ai);
   void init(in_addr_t address, uint16_t port);
   
-  auto sockaddr() -> struct sockaddr *;
+  auto sock_addr() -> struct sockaddr *;
   auto len() -> socklen_t;
   auto size() -> socklen_t&;
   
