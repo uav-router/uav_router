@@ -14,9 +14,9 @@
 
 class Epoll {
 public:
-    Epoll():efd(-1) {}
+    Epoll() = default;
 
-    errno_c create(int flags = 0) {
+    auto create(int flags = 0) -> errno_c {
         efd = epoll_create1(flags);
         if (efd==-1) return errno_c("epoll_create");
         return errno_c(0);
@@ -24,7 +24,7 @@ public:
     ~Epoll() {
         if (efd != -1) close(efd);
     }
-    errno_c add(int fd, uint32_t events, void* ptr = nullptr) {
+    auto add(int fd, uint32_t events, void* ptr = nullptr) -> errno_c {
         epoll_event ev;
         ev.events = events;
         if (ptr) { ev.data.ptr = ptr;
@@ -32,7 +32,7 @@ public:
         }
         return err_chk(epoll_ctl(efd, EPOLL_CTL_ADD, fd, &ev), "epoll_ctl add");
     }
-    errno_c mod(int fd, uint32_t events, void* ptr = nullptr) {
+    auto mod(int fd, uint32_t events, void* ptr = nullptr) -> errno_c {
         epoll_event ev;
         ev.events = events;
         if (ptr) { ev.data.ptr = ptr;
@@ -40,16 +40,16 @@ public:
         }
         return err_chk(epoll_ctl(efd, EPOLL_CTL_MOD, fd, &ev), "epoll_ctl mod");
     }
-    errno_c del(int fd) {
+    auto del(int fd) -> errno_c {
         epoll_event ev;
         return err_chk(epoll_ctl(efd, EPOLL_CTL_DEL, fd, &ev), "epoll_ctl del");
     }
-    int wait(epoll_event *events, int maxevents, int timeout = -1, const sigset_t *sigmask = nullptr) {
+    auto wait(epoll_event *events, int maxevents, int timeout = -1, const sigset_t *sigmask = nullptr) -> int {
         if (sigmask) return epoll_pwait(efd, events, maxevents, timeout, sigmask);
         return epoll_wait(efd, events, maxevents, timeout);
     }
 private:
-    int efd;
+    int efd = -1;
 };
 
 class Signal : public IOPollable, public error_handler {
@@ -61,7 +61,7 @@ public:
     void on_signal(OnSignalFunc func) {
         _on_signal = func;
     }
-    int epollIN() override {
+    auto epollIN() -> int override {
         while(true) {
             signalfd_siginfo fdsi;
             ssize_t s = read(_fd, &fdsi, sizeof(fdsi));
@@ -84,8 +84,8 @@ public:
     void cleanup() override {
         if (_fd != -1) close(_fd);
     }
-    error_c start_with(IOLoop* loop) override {
-        error_c ret = err_chk(sigprocmask(SIG_BLOCK, &mask, NULL),"sigprocmask");
+    auto start_with(IOLoop* loop) -> error_c override {
+        error_c ret = err_chk(sigprocmask(SIG_BLOCK, &mask, nullptr),"sigprocmask");
         if (ret) return ret;
         _fd = signalfd(-1, &mask, SFD_NONBLOCK);
         if (_fd==-1) {
@@ -116,12 +116,12 @@ public:
     void on_action(OnActionFunc func) {
         _on_action = func;
     }
-    error_c start_with(IOLoop* loop) override {
+    auto start_with(IOLoop* loop) -> error_c override {
         _udev = udev_new();
         if (!_udev) return errno_c("udev_new");
         _mon = udev_monitor_new_from_netlink(_udev, "udev");
         if (!_mon) return errno_c("udev_monitor_new_from_netlink");
-        int ret = udev_monitor_filter_add_match_subsystem_devtype(_mon,"tty",NULL);
+        int ret = udev_monitor_filter_add_match_subsystem_devtype(_mon,"tty",nullptr);
         if (ret<0) return errno_c("udev_monitor_filter_add_match_subsystem_devtype");
         ret = udev_monitor_enable_receiving(_mon);
         if (ret<0) return errno_c("udev_monitor_enable_receiving");
@@ -135,7 +135,7 @@ public:
         if (_mon) udev_monitor_unref(_mon);
         if (_fd >= 0) close(_fd);
     }
-    int epollIN() override {
+    auto epollIN() -> int override {
         udev_device *dev = udev_monitor_receive_device(_mon);
         if (!dev) {
             errno_c err("udev_monitor_receive_device");
@@ -143,7 +143,7 @@ public:
         } else if (_on_action) _on_action(dev);
         return HANDLED;
     }
-    std::string find_link(const std::string& path) {
+    auto find_link(const std::string& path) -> std::string {
         std::string ret;
         udev_enumerate *enumerate = udev_enumerate_new(_udev);
         if (!enumerate) return ret;
@@ -172,7 +172,7 @@ public:
         udev_enumerate_unref(enumerate);
         return ret;
     }
-    std::string return_id(udev_device *dev) {
+    auto return_id(udev_device *dev) -> std::string {
         std::string ret;
         udev_list_entry *list_entry;
         udev_list_entry_foreach(list_entry, udev_device_get_devlinks_list_entry(dev)) {
@@ -183,7 +183,7 @@ public:
         }
         return ret;
     }
-    std::string find_id(const std::string& path) {
+    auto find_id(const std::string& path) -> std::string {
         std::string sysname = path;
         auto pos = sysname.rfind("/");
         if (pos!= std::string::npos) {
@@ -194,7 +194,7 @@ public:
         return return_id(dev);
     }
 
-    std::string find_path(const std::string& id) {
+    auto find_path(const std::string& id) -> std::string {
         std::string ret;
         udev_enumerate *enumerate = udev_enumerate_new(_udev);
         if (!enumerate) return ret;
@@ -231,7 +231,7 @@ private:
 
 class IOLoop::IOLoopImpl {
 public:
-    IOLoopImpl(int size=8):_size(size),_stop(false) {
+    IOLoopImpl(int size=8):_size(size) {
         errno_c ret = _epoll.create();
         if (ret) {
             ret.add_place("IOLoop");
@@ -250,29 +250,29 @@ public:
     UDevIO udev;
     int _sig_fd;
     int _size;
-    bool _stop;
+    bool _stop = false;
     std::set<IOPollable*> watches;
     std::set<IOPollable*> udev_watches;
 };
 
 IOLoop::IOLoop(int size):_impl{new IOLoopImpl{size}} {}
 
-IOLoop::~IOLoop() {}
+IOLoop::~IOLoop() = default;
 
-error_c IOLoop::execute(IOPollable* obj) {
+auto IOLoop::execute(IOPollable* obj) -> error_c {
     return obj->start_with(this);
 }
-errno_c IOLoop::add(int fd, uint32_t events, IOPollable* obj) {
+auto IOLoop::add(int fd, uint32_t events, IOPollable* obj) -> errno_c {
     errno_c ret = _impl->_epoll.add(fd, events, obj);
     if (!ret) {
         _impl->watches.insert(obj);
     }
     return ret;
 }
-errno_c IOLoop::mod(int fd, uint32_t events, IOPollable* obj) {
+auto IOLoop::mod(int fd, uint32_t events, IOPollable* obj) -> errno_c {
     return _impl->_epoll.mod(fd, events, obj);
 }
-errno_c IOLoop::del(int fd, IOPollable* obj) {
+auto IOLoop::del(int fd, IOPollable* obj) -> errno_c {
     errno_c ret = _impl->_epoll.del(fd);
     if (!ret) {
         _impl->watches.erase(obj);
@@ -286,16 +286,16 @@ void IOLoop::udev_stop_watch(IOPollable* obj) {
     _impl->udev_watches.erase(obj);
 }
 
-std::string IOLoop::udev_find_id(const std::string& path) {
+auto IOLoop::udev_find_id(const std::string& path) -> std::string {
     return _impl->udev.find_id(path);
 }
 
-std::string IOLoop::udev_find_path(const std::string& id) {
+auto IOLoop::udev_find_path(const std::string& id) -> std::string {
     return _impl->udev.find_path(id);
 }
 
 
-int IOLoop::run() {
+auto IOLoop::run() -> int {
     log::debug()<<"run start"<<std::endl;
     _impl->stop_signal.init({SIGINT,SIGTERM});
     _impl->stop_signal.on_signal([this](signalfd_siginfo* si) {
@@ -342,7 +342,7 @@ int IOLoop::run() {
             }
         }
         for (int i = 0; i < r; i++) {
-            IOPollable* obj = static_cast<IOPollable *>(events[i].data.ptr);
+            auto* obj = static_cast<IOPollable *>(events[i].data.ptr);
             auto evs = events[i].events;
             log::debug()<<obj->name<<" event "<<evs<<std::endl;
             if (obj->epollEvent(evs)) continue;

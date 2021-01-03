@@ -54,6 +54,10 @@
         "unordered_set": "cpp",
         "bitset": "cpp",
         "iomanip": "cpp",
-        "filesystem": "cpp"
+        "filesystem": "cpp",
+        "compare": "cpp",
+        "concepts": "cpp",
+        "csignal": "cpp",
+        "ranges": "cpp"
     }
 }
