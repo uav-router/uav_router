@@ -80,6 +80,7 @@ public:
     void init_uart_retry() {
         error_c ret = init_uart();
         if (on_error(ret,"init_uart")) {
+            if (!_usb_id.empty() && ret == std::error_condition(std::errc::no_such_device)) return;
             _timer.init_oneshoot(5s);
             ret = _loop->execute(&_timer);
             if (on_error(ret,"restart timer")) return;
@@ -91,7 +92,25 @@ public:
     }
 
     error_c init_uart() {
+        if (_fd!=-1) close(_fd);
         FD watcher(_fd);
+        if (_usb_id.empty()) {
+            if (_path.rfind("/dev/serial/by-id/",0)==0) {
+                _usb_id = _path;
+                _path.clear();
+            } else {
+                _usb_id = _loop->udev_find_id(_path);
+            }
+            if (!_usb_id.empty()) {
+                log::debug()<<"USB port "<<_usb_id<<" detected"<<std::endl;
+                _loop->udev_start_watch(this);
+            }
+        }
+        if (!_usb_id.empty()) {
+            auto found = _loop->udev_find_path(_usb_id);
+            if (found.empty()) return errno_c(ENODEV,_usb_id+" not found");
+            _path = found;
+        }
         _fd = ::open(_path.c_str(), O_RDWR|O_NONBLOCK|O_CLOEXEC|O_NOCTTY);
         if (_fd == -1) { return errno_c("uart "+_path+" open");
         }
@@ -169,6 +188,21 @@ public:
         return HANDLED;
     }
 
+    int epollERR() override {
+        log::debug()<<"EPOLLERR on uart "<<_path<<std::endl;
+        return HANDLED;
+    }
+
+    int epollHUP() override {
+        if (_fd != -1) {
+            _loop->del(_fd, this);
+            close(_fd);
+            _fd = -1;
+            init_uart_retry();
+        }
+        return HANDLED;
+    }
+
     error_c start_with(IOLoop* loop) override {
         _loop = loop;
         init_uart_retry();
@@ -178,6 +212,8 @@ public:
     void cleanup() override {
         if (_fd != -1) {
             close(_fd);
+        }
+        if (!_usb_id.empty()) { _loop->udev_stop_watch(this);
         }
     }
     int write(const void* buf, int len) override {
@@ -192,20 +228,36 @@ public:
         }
         return n;
     }
-    void on_read(OnReadFunc func) override {
-        _on_read=func;
+    void on_read(OnReadFunc func) override { _on_read=func;
     }
 
-    void on_connect(OnEventFunc func) override {
-        _on_connect=func;
+    void on_connect(OnEventFunc func) override { _on_connect=func;
     }
 
-    void on_close(OnEventFunc func) override {
-        _on_close=func;
+    void on_close(OnEventFunc func) override { _on_close=func;
     }
+
+    void udev_add(const std::string& node, const std::string& id) override {
+        if (id==_usb_id) { 
+            log::debug()<<"Device "<<_usb_id<<" added"<<std::endl;
+            init_uart_retry();
+        }
+    }
+    void udev_remove(const std::string& node, const std::string& id) override {
+        if (id==_usb_id) {
+            log::debug()<<"Device "<<_usb_id<<" removed"<<std::endl;
+            if (_fd != -1) { 
+                _loop->del(_fd, this);
+                close(_fd);
+                _fd = -1;
+            }
+        }
+    }
+    
 private:
     std::string _name;
     std::string _path;
+    std::string _usb_id;
     speed_t _baudrate = B115200;
     bool _is_writeable = false;
     bool _flow_control = false;

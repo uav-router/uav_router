@@ -6,7 +6,7 @@
 #include <set>
 #include <initializer_list>
 //#include <filesystem>
-#include <libudev.h>
+#include <libudev.h> //dnf install systemd-devel; apt-get install libudev-dev
 
 #include "log.h"
 #include "err.h"
@@ -109,10 +109,10 @@ private:
     int _fd = -1;
 };
 
-class UDev : public IOPollable, public error_handler {
+class UDevIO : public IOPollable, public error_handler {
 public:
     using OnActionFunc = std::function<void(udev_device*)>;
-    UDev():IOPollable("udev") {}
+    UDevIO():IOPollable("udev") {}
     void on_action(OnActionFunc func) {
         _on_action = func;
     }
@@ -247,7 +247,7 @@ public:
     }
     Epoll _epoll;
     Signal stop_signal;
-    UDev udev;
+    UDevIO udev;
     int _sig_fd;
     int _size;
     bool _stop;

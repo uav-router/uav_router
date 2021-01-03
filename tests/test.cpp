@@ -172,7 +172,7 @@ int getifaddr_test() {
 int uart_test() {
     IOLoop loop;
     auto uart = UART::create("UartEndpoint");
-    uart->init("/dev/ttyS1",&loop,921600);//115200);
+    uart->init("/dev/ttyUSB0",&loop,115200);//921600);
     uart->on_connect([]() {
         std::cout<<"uart connected"<<std::endl;
     });
@@ -200,11 +200,11 @@ int uart_test() {
 
 int main() {
     log::init();
-    //log::set_level(log::Level::DEBUG);
+    log::set_level(log::Level::DEBUG);
     //return addrinfo_test();
     //getifaddr_test();
     //return timer_test();
     //return test_if_address();
-    //return uart_test();
-    return getifaddr_test();
+    return uart_test();
+    //return getifaddr_test();
 }
