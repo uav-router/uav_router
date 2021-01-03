@@ -63,6 +63,7 @@ void SockAddr::init(addrinfo *ai) {
 }
 
 void SockAddr::init(in_addr_t address, uint16_t port) {
+    if (!_impl) _impl = std::make_unique<SockAddrImpl>();
     _impl->addr.in.sin_family    = AF_INET;
     _impl->addr.in.sin_addr.s_addr = address;
     _impl->addr.in.sin_port = htons(port);
@@ -73,12 +74,14 @@ SockAddr::SockAddr(const std::string& address, uint16_t port):_impl{new SockAddr
     int ret = inet_pton(AF_INET,address.c_str(),&_impl->addr.in.sin_addr);
     if (ret) {
         _impl->length = sizeof(sockaddr_in);
+        _impl->addr.in.sin_family = AF_INET;
         _impl->addr.in.sin_port = htons(port);
         return;
     }
     ret = inet_pton(AF_INET6,address.c_str(),&_impl->addr.in6.sin6_addr);
     if (ret) {
         _impl->length = sizeof(sockaddr_in6);
+        _impl->addr.in6.sin6_family = AF_INET6;
         _impl->addr.in6.sin6_port = htons(port);
     }
 }

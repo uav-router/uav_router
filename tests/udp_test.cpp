@@ -148,8 +148,8 @@ int main() {
     log::init();
     log::set_level(log::Level::DEBUG);
     //return udp_test();
-    return udp_broadcast_test();
-    //return udp_multicast_test();
+    //return udp_broadcast_test();
+    return udp_multicast_test();
 }
 
 /*int udp_client_base_test() {
