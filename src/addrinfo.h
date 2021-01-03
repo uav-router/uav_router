@@ -5,6 +5,7 @@
 #include <unistd.h>
 #include "err.h"
 #include "epoll.h"
+#include <iostream>
 
 class SockAddr {
 public:
@@ -32,10 +33,13 @@ public:
   
   auto operator=(const SockAddr &other) -> SockAddr &;
   auto operator=(SockAddr &&other) noexcept -> SockAddr &;
+  friend auto operator<<(std::ostream &os, const SockAddr &addr) -> std::ostream&;
 private:
     class SockAddrImpl;
     std::unique_ptr<SockAddrImpl> _impl;
 };
+
+auto operator<<(std::ostream &os, const SockAddr &addr) -> std::ostream&;
 
 class AddressResolver : public error_handler {
 public:

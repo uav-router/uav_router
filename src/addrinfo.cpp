@@ -138,6 +138,25 @@ auto SockAddr::operator=(SockAddr&& other) noexcept -> SockAddr& {
     return *this;
 }
 
+auto operator<<(std::ostream &os, const SockAddr &addr) -> std::ostream& {
+    if (!addr._impl) {
+        os<<"empty address";
+    } else {
+        if (addr._impl->length==0) {
+            os<<"0-length address";
+        } else if (addr._impl->addr.storage.ss_family==AF_INET) {
+            char buf[256];
+            os<<inet_ntop(AF_INET, &addr._impl->addr.in.sin_addr,buf,sizeof(buf))<<":"<<ntohs(addr._impl->addr.in.sin_port);
+        } else if (addr._impl->addr.storage.ss_family==AF_INET6) {
+            char buf[256];
+            os<<inet_ntop(AF_INET6, &addr._impl->addr.in6.sin6_addr,buf,sizeof(buf))<<":"<<ntohs(addr._impl->addr.in6.sin6_port);
+        } else {
+            os<<"unknown address of length "<<addr._impl->length;
+        }
+    }
+    return os;
+}
+
 class AddrInfo final : public IOPollable, public error_handler {
 public:
     using callback_t = std::function<void(addrinfo*, std::error_code& ec)>;

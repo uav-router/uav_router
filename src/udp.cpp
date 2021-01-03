@@ -37,6 +37,7 @@ public:
         _ttl = ttl;
         _broadcast=false;
         _multicast=true;
+        log::debug()<<"Multicast addr:"<<_addr<<", itf:"<<_itf<<std::endl;
     }
     void on_read(OnReadFunc func) {
         _on_read = func;
@@ -238,7 +239,7 @@ public:
 
     void init_multicast(const std::string& address, uint16_t port, IOLoop* loop, const std::string& interface, int ttl) override {
         _loop = loop;
-        log::debug()<<"init multicast started"<<std::endl;
+        log::debug()<<"client init multicast started "<<address<<":"<<port<<" i:"<<interface<<std::endl;
         SockAddr maddr(address, port);
         if (maddr.len()==0) {
             errno_c ret(EINVAL);
@@ -318,7 +319,7 @@ public:
     }
     void init_multicast(const std::string& address, uint16_t port, IOLoop* loop, const std::string& interface="") override {
         _loop = loop;
-        log::debug()<<"init multicast started"<<std::endl;
+        log::debug()<<"server init multicast started "<<address<<":"<<port<<" i:"<<interface<<std::endl;
         SockAddr maddr(address, port);
         if (maddr.len()==0) {
             errno_c ret(EINVAL);
