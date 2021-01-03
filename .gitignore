@@ -34,3 +34,4 @@
 build/
 bintest/
 .lock*
+.cache/

@@ -45,9 +45,9 @@ int main(int argc, char *argv[])
         DieWithError("socket() failed");
 
     int broadcastPermission = 1;
-    /*if (setsockopt(sock, SOL_SOCKET, SO_BROADCAST, (void *) &broadcastPermission, 
+    if (setsockopt(sock, SOL_SOCKET, SO_BROADCAST, (void *) &broadcastPermission, 
           sizeof(broadcastPermission)) < 0)
-        DieWithError("setsockopt() failed");*/
+        DieWithError("setsockopt() failed");
 
     if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, (void *) &broadcastPermission, 
           sizeof(broadcastPermission)) < 0)

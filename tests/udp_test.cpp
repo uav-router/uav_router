@@ -92,7 +92,7 @@ int udp_broadcast_test() {
     server->on_error([](const error_c& ec) {
         std::cout<<"Udp socket error:"<<ec.place()<<": "<<ec.message()<<std::endl;
     });
-    server->init(15000, &loop, "<broadcast>", true);
+    server->init_broadcast(15000, &loop, "<broadcast>");
 
     auto client = UdpClient::create("ClientEndpoint");
     client->on_read([](void* buf, int len){
@@ -148,8 +148,8 @@ int main() {
     log::init();
     log::set_level(log::Level::DEBUG);
     //return udp_test();
-    //return udp_broadcast_test();
-    return udp_multicast_test();
+    return udp_broadcast_test();
+    //return udp_multicast_test();
 }
 
 /*int udp_client_base_test() {

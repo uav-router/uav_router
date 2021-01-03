@@ -1,6 +1,8 @@
+#include <netinet/in.h>
 #include <unistd.h>
 //#include <fcntl.h>
 #include <cstring>
+#include <utility>
 #include <sys/epoll.h>
 #include <sys/ioctl.h>
 
@@ -24,17 +26,14 @@ struct FD {
 class UdpBase : public IOPollable, public IOWriteable, public error_handler {
 public:
     UdpBase(const std::string n):IOPollable(n) {}
-    void init(socklen_t addrlen, sockaddr *addr, bool broadcast=false) {
+    void init(addrinfo* ai, bool broadcast=false) {
         _broadcast=broadcast;
         _multicast=false;
-        _addrlen = addrlen;
-        memcpy(&_addr,addr,_addrlen);
+        _addr.init(ai);
     }
-    void init_multicast(socklen_t addrlen, sockaddr *addr, socklen_t itflen, sockaddr *itf, unsigned char ttl) {
-        _addrlen = addrlen;
-        memcpy(&_addr,addr,_addrlen);
-        _itflen = itflen;
-        memcpy(&_itf,itf,_itflen);
+    void init_multicast(const SockAddr& addr, const SockAddr& itf, unsigned char ttl) {
+        _addr = addr;
+        _itf = itf;
         _ttl = ttl;
         _broadcast=false;
         _multicast=true;
@@ -45,7 +44,7 @@ public:
     void cleanup() override {
         if (_fd != -1) close(_fd);
     }
-    int epollIN() override {
+    auto epollIN() -> int override {
         while(true) {
             int sz;
             errno_c ret = err_chk(ioctl(_fd, FIONREAD, &sz),"udp ioctl");
@@ -56,14 +55,13 @@ public:
                     break;
                 }
                 void* buffer = alloca(sz);
-                _send_addrlen = sizeof(_send_addr);
-                ssize_t n = recvfrom(_fd, buffer, sz, 0, (sockaddr*)&_send_addr, &_send_addrlen);
+                ssize_t n = recvfrom(_fd, buffer, sz, 0, _send_addr.sockaddr(), &_send_addr.size());
                 if (n<0) {
                     errno_c ret;
                     if (ret != std::error_condition(std::errc::resource_unavailable_try_again)) {
                         on_error(ret, "udp recvfrom");
                     }
-                    _send_addrlen = 0;
+                    _send_addr.size() = 0;
                 } else {
                     if (n != sz) {
                         log::warning()<<"Datagram declared size "<<sz<<" is differ than read "<<n<<std::endl;
@@ -75,17 +73,17 @@ public:
         }
         return HANDLED;
     }
-    int epollOUT() override {
+    auto epollOUT() -> int override {
         is_writeable = true;
         return HANDLED;
     }
 protected:
 
-    int send(const void* buf, int len, sockaddr* addr, socklen_t alen) {
+    auto send(const void* buf, int len, SockAddr& addr) -> int {
         if (!is_writeable) {
             return 0;
         }
-        int ret = sendto(_fd, buf, len, 0, (sockaddr*)addr, alen);
+        int ret = sendto(_fd, buf, len, 0, addr.sockaddr(), addr.len());
         if (ret==-1) {
             errno_c err;
             on_error(err, "UDP send datagram");
@@ -96,12 +94,9 @@ protected:
         return ret;
     }
 
-    socklen_t _addrlen = 0;
-    sockaddr_storage _addr;
-    socklen_t _send_addrlen = 0;
-    sockaddr_storage _send_addr;
-    socklen_t _itflen = 0;
-    sockaddr_storage _itf;
+    SockAddr _addr;
+    SockAddr _send_addr;
+    SockAddr _itf;
     unsigned char _ttl = 0;
     int _fd = -1;
     bool is_writeable = true;
@@ -113,7 +108,7 @@ protected:
 class UdpClientBase : public UdpBase {
 public:
     UdpClientBase():UdpBase("udp client") {}
-    error_c start_with(IOLoop* loop) override {
+    auto start_with(IOLoop* loop) -> error_c override {
         FD watcher(_fd);
         _fd = socket(AF_INET, SOCK_DGRAM | SOCK_NONBLOCK, 0);
         if (_fd == -1) { return errno_c("udp client socket");
@@ -127,8 +122,8 @@ public:
                 errno_c ret = err_chk(setsockopt(_fd, IPPROTO_IP, IP_MULTICAST_TTL, (void *)&_ttl, sizeof(_ttl)),"multicast ttl");
                 if (ret) return ret;
             }
-            if (_itflen && _itf.ss_family==AF_INET && ((sockaddr_in*)&_itf)->sin_addr.s_addr!=htonl(INADDR_ANY)) {
-                auto itf = ((sockaddr_in*)&_itf)->sin_addr.s_addr;
+            in_addr_t itf = _itf.ip4_addr_t();
+            if (itf!=htonl(INADDR_ANY)) {
                 errno_c ret = err_chk(setsockopt(_fd, IPPROTO_IP, IP_MULTICAST_IF, (void *)&itf, sizeof(itf)),"multicast itf");
                 if (ret) return ret;
             }
@@ -139,15 +134,15 @@ public:
         watcher.clear();
         return error_c();
     }
-    int write(const void* buf, int len) override {
-        return send(buf, len, (sockaddr*)&_addr, _addrlen);
+    auto write(const void* buf, int len) -> int override {
+        return send(buf, len, _addr);
     }
 };
 
 class UdpServerBase : public UdpBase {
 public:
     UdpServerBase():UdpBase("udp server") {}
-    error_c start_with(IOLoop* loop) override {
+    auto start_with(IOLoop* loop) -> error_c override {
         FD watcher(_fd);
         _fd = socket(AF_INET, SOCK_DGRAM | SOCK_NONBLOCK, 0);
         if (_fd == -1) { return errno_c("udp server socket");
@@ -165,20 +160,16 @@ public:
                 ret = err_chk(setsockopt(_fd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes)),"multicast reuseaddr");
                 if (ret) return ret;
             }
-            sockaddr_in any;
-            memset(&any, 0, sizeof(any));
-            any.sin_family = AF_INET;
-            any.sin_addr.s_addr = htonl(INADDR_ANY);
-            any.sin_port = ((sockaddr_in*)&_addr)->sin_port;
-            ret = err_chk(bind(_fd, (sockaddr *)&any, sizeof(any)), "udp server multicast bind");
+            SockAddr any(INADDR_ANY, _addr.port());
+            ret = err_chk(bind(_fd, any.sockaddr(), any.len()), "udp server multicast bind");
             if (ret) return ret;
             ip_mreq mreq;
-            mreq.imr_multiaddr.s_addr = ((sockaddr_in*)&_addr)->sin_addr.s_addr;
-            mreq.imr_interface.s_addr = ((sockaddr_in*)&_itf)->sin_addr.s_addr;
+            mreq.imr_multiaddr.s_addr = _addr.ip4_addr_t();
+            mreq.imr_interface.s_addr = _itf.ip4_addr_t();
             ret = err_chk(setsockopt(_fd, IPPROTO_IP, IP_ADD_MEMBERSHIP, &mreq, sizeof(mreq)),"add membership");
             if (ret) return ret;
         } else {
-            error_c ret = err_chk(bind(_fd, (sockaddr *)&_addr, _addrlen), "udp server bind");
+            error_c ret = err_chk(bind(_fd, _addr.sockaddr(), _addr.len()), "udp server bind");
             if (ret) return ret;
         }
         error_c ret = loop->add(_fd, EPOLLIN | EPOLLOUT | EPOLLET, this);
@@ -191,8 +182,8 @@ public:
         if (_fd != -1) {
             if (_multicast) {
                 ip_mreq mreq;
-                mreq.imr_multiaddr.s_addr = ((sockaddr_in*)&_addr)->sin_addr.s_addr;
-                mreq.imr_interface.s_addr = ((sockaddr_in*)&_itf)->sin_addr.s_addr;
+                mreq.imr_multiaddr.s_addr = _addr.ip4_addr_t();
+                mreq.imr_interface.s_addr = _itf.ip4_addr_t();
                 error_c ret = err_chk(setsockopt(_fd, IPPROTO_IP, IP_DROP_MEMBERSHIP, &mreq, sizeof(mreq)),"drop membership");
                 on_error(ret);
             }
@@ -201,19 +192,19 @@ public:
         }
     }
 
-    int write(const void* buf, int len) override {
+    auto write(const void* buf, int len) -> int override {
         log::debug()<<"udp write"<<std::endl;
-        if (_send_addrlen == 0) {
+        if (_send_addr.len() == 0) {
             return 0;
         }
         log::debug()<<"send"<<std::endl;
-        return send(buf,len,(sockaddr*)&_send_addr, _send_addrlen);
+        return send(buf,len,_send_addr);
     }
 };
 
 class UdpClientImpl : public UdpClient {
 public:
-    UdpClientImpl(const std::string& name):_name(name),_addr_resolver{AddressResolver::create()} {
+    UdpClientImpl(std::string  name):_name(std::move(name)),_addr_resolver{AddressResolver::create()} {
         auto on_err = [this](error_c& ec){ on_error(ec,_name);};
         _udp.on_error(on_err);
         _addr_resolver->on_error(on_err);
@@ -229,49 +220,40 @@ public:
     void init(const std::string& host, uint16_t port, IOLoop* loop) override {
         _loop = loop;
         _addr_resolver->on_resolve([this](addrinfo* ai) {
-            _udp.init(ai->ai_addrlen, ai->ai_addr);
+            _udp.init(ai);
             execute();
         });
-        _addr_resolver->init_resolving_client(host,port,loop);
+        _addr_resolver->remote(host,port,loop);
         
     }
 
     void init_broadcast(uint16_t port, IOLoop* loop, const std::string& interface) override {
         _loop = loop;
         _addr_resolver->on_resolve([this](addrinfo* ai) {
-            _udp.init(ai->ai_addrlen, ai->ai_addr,true);
+            _udp.init(ai,true);
             execute();
         });
-        _addr_resolver->init_resolving_broadcast(port,loop,interface);
+        _addr_resolver->broadcast(port,loop,interface);
     }
 
     void init_multicast(const std::string& address, uint16_t port, IOLoop* loop, const std::string& interface, int ttl) override {
         _loop = loop;
         log::debug()<<"init multicast started"<<std::endl;
-        sockaddr_storage addr;
-        socklen_t addr_len;
-        _addr_resolver->on_resolve([this,&addr,&addr_len](addrinfo* addr_info) {
-            memcpy(&addr,addr_info->ai_addr,addr_info->ai_addrlen);
-            addr_len = addr_info->ai_addrlen;
-        });
-        error_c ret = _addr_resolver->resolve_ip4(address,port);
-        if (ret) {
-            on_error(ret,"resolve multicast address");
+        SockAddr maddr(address, port);
+        if (maddr.len()==0) {
+            errno_c ret(EINVAL);
+            on_error(ret,"inet_pton");
             return;
         }
-        sockaddr_storage maddr;
-        socklen_t maddr_len = addr_len;
-        memcpy(&maddr,&addr,addr_len);
+        SockAddr addr;
+        _addr_resolver->on_resolve([this,&addr](addrinfo* addr_info) {
+            addr.init(addr_info->ai_addr,addr_info->ai_addrlen);
+        });
 
-        ret = _addr_resolver->resolve_interface_ip4(interface,port,AddressResolver::Interface::ADDRESS);
-        if (ret) {
-            sockaddr_in* a = (sockaddr_in*)&addr;
-            addr_len = sizeof(sockaddr_in);
-            a->sin_family = AF_INET;
-            a->sin_addr.s_addr = htonl(INADDR_ANY);
-            a->sin_port = port;
+        error_c ret = _addr_resolver->resolve_interface_ip4(interface,port,AddressResolver::Interface::ADDRESS);
+        if (ret) { addr.init(INADDR_ANY, port);
         }
-        _udp.init_multicast(maddr_len, (sockaddr*)&maddr, addr_len, (sockaddr*)&addr, ttl);
+        _udp.init_multicast(maddr, addr, ttl);
         execute();
     }
 
@@ -281,7 +263,7 @@ public:
     void on_connect(OnEventFunc func) override {
         _on_connect = func;
     }
-    int write(const void* buf, int len) override {
+    auto write(const void* buf, int len) -> int override {
         if (!_is_writeable) {
             return 0;
         }
@@ -296,62 +278,67 @@ public:
     OnEventFunc _on_connect;
 };
 
-std::unique_ptr<UdpClient> UdpClient::create(const std::string& name) {
+auto UdpClient::create(const std::string& name) -> std::unique_ptr<UdpClient> {
     return std::unique_ptr<UdpClient>{new UdpClientImpl(name)};
 }
 
 class UdpServerImpl : public UdpServer {
 public:
-    UdpServerImpl(const std::string& name):_name(name),_addr_resolver{AddressResolver::create()} {
+    UdpServerImpl(std::string  name):_name(std::move(name)),_addr_resolver{AddressResolver::create()} {
         auto on_err = [this](error_c& ec){ on_error(ec,_name);};
         _udp.on_error(on_err);
         _addr_resolver->on_error(on_err);
     };
-    void init(uint16_t port, IOLoop* loop, const std::string& host_or_interface="", bool broadcast=false) override {
+    void init(uint16_t port, IOLoop* loop, const std::string& host) override {
         _loop = loop;
-        _addr_resolver->on_resolve([this,broadcast](addrinfo* ai) {
-            _udp.init(ai->ai_addrlen, ai->ai_addr, broadcast);
+        _addr_resolver->on_resolve([this](addrinfo* ai) {
+            _udp.init(ai, false);
             error_c ec = _loop->execute(&_udp);
             _is_writeable = !on_error(ec,"udp server");
         });
-        if (broadcast) {
-            _addr_resolver->init_resolving_broadcast(port,_loop,host_or_interface);
-        } else {
-            _addr_resolver->init_resolving_server(port,_loop,host_or_interface);
-        }
+        _addr_resolver->local(port,_loop,host);
+    }
+    void init_interface(const std::string& interface, uint16_t port, IOLoop* loop) override {
+        _loop = loop;
+        _addr_resolver->on_resolve([this](addrinfo* ai) {
+            _udp.init(ai, false);
+            error_c ec = _loop->execute(&_udp);
+            _is_writeable = !on_error(ec,"udp server");
+        });
+        _addr_resolver->local_interface(interface, port,_loop);
+    }
+    void init_broadcast(uint16_t port, IOLoop* loop, const std::string& interface) override {
+        _loop = loop;
+        _addr_resolver->on_resolve([this](addrinfo* ai) {
+            _udp.init(ai, true);
+            error_c ec = _loop->execute(&_udp);
+            _is_writeable = !on_error(ec,"udp server");
+        });
+        _addr_resolver->broadcast(port,_loop,interface);
     }
     void init_multicast(const std::string& address, uint16_t port, IOLoop* loop, const std::string& interface="") override {
         _loop = loop;
         log::debug()<<"init multicast started"<<std::endl;
-        sockaddr_storage addr;
-        socklen_t addr_len;
-        _addr_resolver->on_resolve([this,&addr,&addr_len](addrinfo* addr_info) {
-            memcpy(&addr,addr_info->ai_addr,addr_info->ai_addrlen);
-            addr_len = addr_info->ai_addrlen;
-        });
-        error_c ret = _addr_resolver->resolve_ip4(address,port);
-        if (ret) {
-            on_error(ret,"resolve multicast address");
+        SockAddr maddr(address, port);
+        if (maddr.len()==0) {
+            errno_c ret(EINVAL);
+            on_error(ret,"inet_pton");
             return;
         }
-        sockaddr_storage maddr;
-        socklen_t maddr_len = addr_len;
-        memcpy(&maddr,&addr,addr_len);
+        SockAddr addr;
+        _addr_resolver->on_resolve([this,&addr](addrinfo* addr_info) {
+            addr.init(addr_info->ai_addr,addr_info->ai_addrlen);
+        });
 
-        ret = _addr_resolver->resolve_interface_ip4(interface,port,AddressResolver::Interface::ADDRESS);
-        if (ret) {
-            sockaddr_in* a = (sockaddr_in*)&addr;
-            addr_len = sizeof(sockaddr_in);
-            a->sin_family = AF_INET;
-            a->sin_addr.s_addr = htonl(INADDR_ANY);
-            a->sin_port = port;
+        error_c ret = _addr_resolver->resolve_interface_ip4(interface,port,AddressResolver::Interface::ADDRESS);
+        if (ret) { addr.init(INADDR_ANY, port);
         }
-        _udp.init_multicast(maddr_len, (sockaddr*)&maddr, addr_len, (sockaddr*)&addr,0);
+        _udp.init_multicast(maddr, addr, 0);
         error_c ec = _loop->execute(&_udp);
         _is_writeable = !on_error(ec,"udp server");
     }
 
-    int write(const void* buf, int len) override {
+    auto write(const void* buf, int len) -> int override {
         log::debug()<<"svr write"<<std::endl;
         if (!_is_writeable) return 0;
         return _udp.write(buf,len);
@@ -367,6 +354,6 @@ public:
     bool _is_writeable = false;
 };
 
-std::unique_ptr<UdpServer> UdpServer::create(const std::string& name) {
+auto UdpServer::create(const std::string& name) -> std::unique_ptr<UdpServer> {
     return std::unique_ptr<UdpServer>{new UdpServerImpl(name)};
 }

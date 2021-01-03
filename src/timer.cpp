@@ -6,7 +6,7 @@
 
 class Timer::TimerImpl {
 public:
-    TimerImpl():_fd(-1) {}
+    TimerImpl() = default;
     void init_periodic(std::chrono::nanoseconds timeout) {
         _ts.it_value.tv_sec  = _ts.it_interval.tv_sec  = timeout.count() / 1000000000;
         _ts.it_value.tv_nsec = _ts.it_interval.tv_nsec = timeout.count() % 1000000000;
@@ -27,7 +27,7 @@ public:
         _ts = *value;
     }
 
-    int _fd;
+    int _fd = -1;
     itimerspec _ts;
     int _clockid;
     int _flags;
@@ -38,7 +38,7 @@ public:
 
 
 Timer::Timer():IOPollable("timer"),_impl{new TimerImpl{}} {}
-Timer::~Timer() {}
+Timer::~Timer() = default;
 
 void Timer::init_periodic(std::chrono::nanoseconds timeout) {
     _impl->init_periodic(timeout);
@@ -53,7 +53,7 @@ void Timer::on_shoot_func(OnEventFunc func) {
     _impl->_on_shoot = func;
 }
 
-int Timer::epollIN() {
+auto Timer::epollIN() -> int {
     int ret = read(_impl->_fd, &_impl->_result, sizeof(_impl->_result));
     if (ret!=sizeof(_impl->_result)) {
         errno_c err;
@@ -67,12 +67,12 @@ int Timer::epollIN() {
     }
     return HANDLED;
 }
-error_c Timer::start_with(IOLoop* loop) {
+auto Timer::start_with(IOLoop* loop) -> error_c {
     _impl->_fd = timerfd_create(_impl->_clockid, TFD_NONBLOCK);
     if (_impl->_fd==-1) {
         return errno_c("timerfd_create");
     }
-    errno_c ret = err_chk(timerfd_settime(_impl->_fd, _impl->_flags, &_impl->_ts, NULL));
+    errno_c ret = err_chk(timerfd_settime(_impl->_fd, _impl->_flags, &_impl->_ts, nullptr));
     if (ret) {
         close(_impl->_fd);
         ret.add_place("timerfd_settime");

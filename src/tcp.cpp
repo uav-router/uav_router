@@ -1,5 +1,6 @@
 #include <unistd.h>
 #include <cstring>
+#include <utility>
 #include <sys/epoll.h>
 #include <sys/ioctl.h>
 #include <fcntl.h>
@@ -14,9 +15,8 @@
 class TcpClientBase : public IOPollable, public IOWriteable, public error_handler {
 public:
     TcpClientBase():IOPollable("tcp client") {}
-    void init(socklen_t addrlen, sockaddr *addr) {
-        _addrlen = addrlen;
-        memcpy(&_addr,addr,_addrlen);
+    void init(addrinfo* ai) {
+        _addr.init(ai);
     }
     void on_read(OnReadFunc func) {
         _on_read = func;
@@ -36,7 +36,7 @@ public:
         }
     }
 
-    int write(const void* buf, int len) override {
+    auto write(const void* buf, int len) -> int override {
         if (!is_writeable) {
             log::debug()<<"write not writable"<<std::endl;
             return 0;
@@ -52,7 +52,7 @@ public:
         return ret;
     }
 
-    errno_c check() {
+    auto check() -> errno_c {
         int ec;
         socklen_t len = sizeof(ec);
         errno_c ret = err_chk(getsockopt(_fd, SOL_SOCKET, SO_ERROR, &ec, &len),"getsockopt");
@@ -60,7 +60,7 @@ public:
         return errno_c(ec,"socket error");
     }
 
-    int epollIN() override {
+    auto epollIN() -> int override {
         errno_c ret = check();
         if (ret) {    on_error(ret);
         } else while(true) {
@@ -92,7 +92,7 @@ public:
         return HANDLED;
     }
 
-    int epollOUT() override {
+    auto epollOUT() -> int override {
         is_writeable = true;
         if (!is_connected) {
             if (_on_connect) _on_connect();
@@ -101,7 +101,7 @@ public:
         return HANDLED;
     }
 
-    int epollRDHUP() override {
+    auto epollRDHUP() -> int override {
         error_c ret = _loop->del(_fd, this);
         if (ret) { on_error(ret,"tcp event");
         }
@@ -110,15 +110,15 @@ public:
         return HANDLED;
     }
 
-    int epollHUP() override { return epollRDHUP(); }
+    auto epollHUP() -> int override { return epollRDHUP(); }
 
-    int epollERR() override {
+    auto epollERR() -> int override {
         errno_c ret = check();
         on_error(ret,"sock error");
         return HANDLED;
     }
 
-    error_c start_with(IOLoop* loop) override {
+    auto start_with(IOLoop* loop) -> error_c override {
         _fd = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0);
         if (_fd == -1) { return errno_c("tcp client socket");
         }
@@ -134,7 +134,7 @@ public:
             close(_fd);
             return ret;
         }
-        ret = err_chk(connect(_fd,(sockaddr*)&_addr, _addrlen),"connect");
+        ret = err_chk(connect(_fd,_addr.sockaddr(), _addr.len()),"connect");
         if (ret && ret!=std::error_condition(std::errc::operation_in_progress)) {
             close(_fd);
             return ret;
@@ -143,8 +143,9 @@ public:
         return loop->add(_fd, EPOLLIN | EPOLLOUT | EPOLLRDHUP | EPOLLET, this);
     }
 private:
-    socklen_t _addrlen = 0;
-    sockaddr_storage _addr;
+    //socklen_t _addrlen = 0;
+    //sockaddr_storage _addr;
+    SockAddr _addr;
     int _fd = -1;
     bool is_writeable = false;
     bool is_connected = false;
@@ -157,20 +158,22 @@ private:
 
 class TcpClientImpl : public TcpClient {
 public:
-    TcpClientImpl(const std::string& name):_name(name),_addr_resolver{AddressResolver::create()} {}
-    void init(const std::string& host, uint16_t port, IOLoop* loop) override {
+    TcpClientImpl(std::string name):_name(std::move(name)),_addr_resolver{AddressResolver::create()} {
         auto on_err = [this](error_c& ec){ on_error(ec,_name);};
         _tcp.on_error(on_err);
         _addr_resolver->on_error(on_err);
         _addr_resolver->on_resolve([this](addrinfo* ai) {
-            _tcp.init(ai->ai_addrlen, ai->ai_addr);
+            _tcp.init(ai);
             error_c ret = _loop->execute(&_tcp);
             if (ret) { on_error(ret,_name);
             }
         });
-        _addr_resolver->init_resolving_client(host,port,loop);
-        _loop = loop;
     }
+    void init(const std::string& host, uint16_t port, IOLoop* loop) override {
+        _loop = loop;
+        _addr_resolver->remote(host,port,loop);
+    }
+
     void on_read(OnReadFunc func) override {
         _tcp.on_read(func);
     }
@@ -183,7 +186,7 @@ public:
         _tcp.on_close(func);
     }
 
-    int write(const void* buf, int len) override {
+    auto write(const void* buf, int len) -> int override {
         return _tcp.write(buf,len);
     }
 
@@ -193,14 +196,14 @@ public:
     std::unique_ptr<AddressResolver> _addr_resolver;
 };
 
-std::unique_ptr<TcpClient> TcpClient::create(const std::string& name) {
+auto TcpClient::create(const std::string& name) -> std::unique_ptr<TcpClient> {
     return std::unique_ptr<TcpClient>{new TcpClientImpl(name)};
 }
 
-class TcpSocketImpl : public IOPollable, public TcpSocket {
+class TcpSocketImpl final : public IOPollable, public TcpSocket {
 public:
     TcpSocketImpl(int fd):IOPollable("tcp socket"),_fd(fd) {}
-    ~TcpSocketImpl() { cleanup();
+    ~TcpSocketImpl() final { cleanup();
     }
     void on_read(OnReadFunc func) override {
         _on_read = func;
@@ -208,14 +211,14 @@ public:
     void on_close(OnEventFunc func) override {
         _on_close = func;
     }
-    errno_c check() {
+    auto check() -> errno_c {
         int ec;
         socklen_t len = sizeof(ec);
         errno_c ret = err_chk(getsockopt(_fd, SOL_SOCKET, SO_ERROR, &ec, &len),"getsockopt");
         if (ret) return ret;
         return errno_c(ec,"socket error");
     }
-    int epollIN() override {
+    auto epollIN() -> int override {
         while(true) {
             int sz;
             errno_c ret = err_chk(ioctl(_fd, FIONREAD, &sz),"tcp ioctl");
@@ -247,14 +250,14 @@ public:
         }
         return HANDLED;
     }
-    int epollOUT() override {
+    auto epollOUT() -> int override {
         _is_writeable = true;
         return HANDLED;
     }
-    int epollERR() override {
+    auto epollERR() -> int override {
         return HANDLED;
     }
-    int epollHUP() override {
+    auto epollHUP() -> int override {
         error_c ret = _loop->del(_fd, this);
         if (ret) on_error(ret, "loop del");
         cleanup();
@@ -262,14 +265,14 @@ public:
         }
         return HANDLED;
     }
-    bool epollEvent(int events) override {
+    auto epollEvent(int events) -> bool override {
         if (events & (EPOLLIN | EPOLLERR)) {
             errno_c err = check();
             if (err || (events & EPOLLERR)) on_error(err,"tcp socket error");
         }
         return false;
     }
-    error_c start_with(IOLoop* loop) override {
+    auto start_with(IOLoop* loop) -> error_c override {
         _loop = loop;
         return loop->add(_fd, EPOLLIN | EPOLLOUT, this);
     }
@@ -278,7 +281,7 @@ public:
             close(_fd);
         }
     }
-    int write(const void* buf, int len) override {
+    auto write(const void* buf, int len) -> int override {
         if (!_is_writeable) return 0;
         ssize_t n = send(_fd, buf, len, 0);
         _is_writeable = n==len;
@@ -302,9 +305,8 @@ private:
 class TcpServerBase : public IOPollable, public error_handler {
 public:
     TcpServerBase():IOPollable("tcp server") {}
-    void init(socklen_t addrlen, sockaddr *addr) {
-        _addrlen = addrlen;
-        memcpy(&_addr,addr,_addrlen);
+    void init(addrinfo* ai) {
+        _addr.init(ai);
     }
     void on_connect(TcpServer::OnConnectFunc func) {
         _on_connect = func;
@@ -320,14 +322,14 @@ public:
             is_connected = false;
         }
     }
-    errno_c check() {
+    auto check() -> errno_c {
         int ec;
         socklen_t len = sizeof(ec);
         errno_c ret = err_chk(getsockopt(_fd, SOL_SOCKET, SO_ERROR, &ec, &len),"getsockopt");
         if (ret) return ret;
         return errno_c(ec,"socket error");
     }
-    int epollIN() override {
+    auto epollIN() -> int override {
         errno_c ret = check();
         if (ret) { on_error(ret);
         } else while(true) {
@@ -372,13 +374,13 @@ public:
         }
         return HANDLED;
     }
-    int epollERR() override {
+    auto epollERR() -> int override {
         errno_c ret = check();
         on_error(ret,"sock error");
         return HANDLED;
     }
 
-    error_c start_with(IOLoop* loop) override {
+    auto start_with(IOLoop* loop) -> error_c override {
         _fd = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0);
         if (_fd == -1) { return errno_c("tcp server socket");
         }
@@ -389,7 +391,7 @@ public:
             close(_fd);
             return ret;
         }*/
-        errno_c ret = err_chk(bind(_fd,(sockaddr*)&_addr, _addrlen),"connect");
+        errno_c ret = err_chk(bind(_fd,_addr.sockaddr(), _addr.len()),"connect");
         if (ret) { // && ret!=std::error_condition(std::errc::operation_in_progress)) {
             close(_fd);
             return ret;
@@ -413,8 +415,9 @@ public:
     }
 
 private:
-    socklen_t _addrlen = 0;
-    sockaddr_storage _addr;
+    SockAddr _addr;
+    //socklen_t _addrlen = 0;
+    //sockaddr_storage _addr;
     int _fd = -1;
     bool is_writeable = false;
     bool is_connected = false;
@@ -425,19 +428,24 @@ private:
 
 class TcpServerImpl : public TcpServer {
 public:
-    TcpServerImpl(const std::string& name):_name(name),_addr_resolver{AddressResolver::create()} {};
-    void init(uint16_t port, IOLoop* loop, const std::string& host_or_interface="") override {
-        _loop = loop;
+    TcpServerImpl(std::string  name):_name(std::move(name)),_addr_resolver{AddressResolver::create()} {
         auto on_err = [this](error_c& ec){ on_error(ec,_name);};
         _tcp.on_error(on_err);
         _addr_resolver->on_error(on_err);
         _addr_resolver->on_resolve([this](addrinfo* ai) {
-            _tcp.init(ai->ai_addrlen, ai->ai_addr);
+            _tcp.init(ai);
             error_c ret = _loop->execute(&_tcp);
             if (ret) { on_error(ret,"tcp client");
             }
         });
-        _addr_resolver->init_resolving_server(port,_loop,host_or_interface);
+    };
+    void init(uint16_t port, IOLoop* loop, const std::string& host="") override {
+        _loop = loop;
+        _addr_resolver->local(port,_loop,host);
+    }
+    void init_interface(const std::string& interface, uint16_t port, IOLoop* loop) override {
+        _loop = loop;
+        _addr_resolver->local_interface(interface,port,_loop);
     }
     void on_connect(OnConnectFunc func) override {
         _tcp.on_connect(func);
@@ -452,6 +460,6 @@ private:
     TcpServerBase _tcp;
 };
 
-std::unique_ptr<TcpServer> TcpServer::create(const std::string& name) {
+auto TcpServer::create(const std::string& name) -> std::unique_ptr<TcpServer> {
     return std::unique_ptr<TcpServer>{new TcpServerImpl(name)};
 }
