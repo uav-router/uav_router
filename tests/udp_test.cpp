@@ -25,7 +25,7 @@ int udp_client_test() {
 }
 
 int udp_server_test() {
-    IOLoop loop;
+    /*IOLoop loop;
     auto udp = UdpServer::create("MyEndpoint");
     udp->init(20001, &loop);
     udp->on_read([&udp](void* buf, int len){
@@ -37,7 +37,7 @@ int udp_server_test() {
     udp->on_error([](const error_c& ec) {
         std::cout<<"Udp socket error:"<<ec.place()<<": "<<ec.message()<<std::endl;
     });
-    loop.run();
+    loop.run();*/
     return 0;
 }
 
@@ -46,12 +46,16 @@ int udp_test() {
 
     auto server = UdpServer::create("ServerEndpoint");
     server->init(20001, &loop);
-    server->on_read([&server](void* buf, int len){
-        std::cout<<"Server reads: ";
-        std::cout.write((char*)buf,len);
-        std::cout<<std::endl;
-        const char* answ = "Hello from server!";
-        server->write(answ, strlen(answ));
+    std::shared_ptr<UdpStream> client_stream;
+    server->on_connect([&client_stream](std::shared_ptr<UdpStream> stream){
+        client_stream = stream;
+        stream->on_read([&client_stream](void* buf, int len) {
+            std::cout<<"Server reads: ";
+            std::cout.write((char*)buf,len);
+            std::cout<<std::endl;
+            const char* answ = "Hello from server!";
+            client_stream->write(answ, strlen(answ));
+        });
     });
     server->on_error([](const error_c& ec) {
         std::cout<<"Udp socket error:"<<ec.place()<<": "<<ec.message()<<std::endl;
@@ -79,7 +83,7 @@ int udp_test() {
 //sudo firewall-cmd --permanent --direct --add-rule ipv4 filter INPUT 0 -m pkttype --pkt-type multicast -j ACCEPT
 //sudo firewall-cmd --reload
 int udp_broadcast_test() {
-    IOLoop loop;
+    /*IOLoop loop;
 
     auto server = UdpServer::create("ServerEndpoint");
     server->on_read([&server](void* buf, int len){
@@ -107,12 +111,12 @@ int udp_broadcast_test() {
         std::cout<<"Udp socket error:"<<ec.place()<<": "<<ec.message()<<std::endl;
     });
     client->init_broadcast(15000, &loop,"<broadcast>");
-    loop.run();
+    loop.run();*/
     return 0;
 }
 
 int udp_multicast_test() {
-    IOLoop loop;
+    /*IOLoop loop;
 
     auto server = UdpServer::create("ServerEndpoint");
     server->on_read([&server](void* buf, int len){
@@ -140,16 +144,16 @@ int udp_multicast_test() {
         std::cout<<"Udp socket error:"<<ec.place()<<": "<<ec.message()<<std::endl;
     });
     client->init_multicast("239.0.0.1",6000, &loop);
-    loop.run();
+    loop.run();*/
     return 0;
 }
 
 int main() {
     log::init();
     log::set_level(log::Level::DEBUG);
-    //return udp_test();
+    return udp_test();
     //return udp_broadcast_test();
-    return udp_multicast_test();
+    //return udp_multicast_test();
 }
 
 /*int udp_client_base_test() {

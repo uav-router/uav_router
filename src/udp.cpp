@@ -1,3 +1,4 @@
+#include <memory>
 #include <netinet/in.h>
 #include <unistd.h>
 //#include <fcntl.h>
@@ -6,6 +7,7 @@
 #include <sys/epoll.h>
 #include <sys/ioctl.h>
 
+#include <map>
 
 #include "err.h"
 #include "log.h"
@@ -25,7 +27,29 @@ struct FD {
 };
 class UdpBase : public IOPollable, public IOWriteable, public error_handler {
 public:
-    UdpBase(const std::string n):IOPollable(n) {}
+    using Streams = std::map<SockAddr, std::shared_ptr<UdpStream>>;
+    class UdpStreamImpl final : public UdpStream {
+    public:
+        UdpStreamImpl(SockAddr addr, UdpBase* s):_addr(std::move(addr)),_socket(s) {}
+        void on_read(OnReadFunc func) override {
+            _on_read = func;
+        }
+        void on_read(void* buffer, int size) {
+            if (_on_read) _on_read(buffer,size);
+        }
+        auto write(const void* buf, int len) -> int override {
+            if (!_socket) return 0;
+            return _socket->send(buf,len,_addr);
+        }
+        void disconnect() {
+            _socket = nullptr;
+        }
+        UdpBase* _socket;
+        SockAddr _addr;
+        OnReadFunc _on_read;
+    };
+
+    UdpBase(const std::string n, bool server):IOPollable(n),_server(server) {}
     void init(addrinfo* ai, bool broadcast=false) {
         _broadcast=broadcast;
         _multicast=false;
@@ -43,6 +67,9 @@ public:
         _on_read = func;
     }
     void cleanup() override {
+        for (auto& stream : streams) {
+            dynamic_cast<UdpStreamImpl*>(stream.second.get())->disconnect();
+        }
         if (_fd != -1) close(_fd);
     }
     auto epollIN() -> int override {
@@ -56,19 +83,38 @@ public:
                     break;
                 }
                 void* buffer = alloca(sz);
-                ssize_t n = recvfrom(_fd, buffer, sz, 0, _send_addr.sock_addr(), &_send_addr.size());
+                SockAddr addr;
+                ssize_t n = recvfrom(_fd, buffer, sz, 0, addr.sock_addr(), &addr.size());
                 if (n<0) {
                     errno_c ret;
                     if (ret != std::error_condition(std::errc::resource_unavailable_try_again)) {
                         on_error(ret, "udp recvfrom");
                     }
-                    _send_addr.size() = 0;
                 } else {
                     if (n != sz) {
                         log::warning()<<"Datagram declared size "<<sz<<" is differ than read "<<n<<std::endl;
                     }
                     log::debug()<<"on_read"<<std::endl;
-                    if (_on_read) _on_read(buffer, n);
+                    if (_server) {
+                        auto stream = streams.find(addr);
+                        if (stream==streams.end()) {
+                            auto ret = streams.insert( std::make_pair(
+                                addr,
+                                std::shared_ptr<UdpStream>(new UdpStreamImpl(addr,this))
+                            ));
+                            if (ret.second) {
+                                stream = ret.first;
+                                if (_on_connect) _on_connect(stream->second);
+                            }
+                        }
+                        if (stream==streams.end()) {
+                            log::error()<<"Insert stream in the map fails"<<std::endl;
+                        } else {
+                            dynamic_cast<UdpStreamImpl*>(stream->second.get())->on_read(buffer, n);
+                        }
+                    } else {
+                        if (_on_read) _on_read(buffer, n);
+                    }
                 }
             }
         }
@@ -78,6 +124,9 @@ public:
         is_writeable = true;
         return HANDLED;
     }
+
+    UdpServer::OnConnectFunc _on_connect;
+
 protected:
 
     auto send(const void* buf, int len, SockAddr& addr) -> int {
@@ -96,7 +145,7 @@ protected:
     }
 
     SockAddr _addr;
-    SockAddr _send_addr;
+    //SockAddr _send_addr;
     SockAddr _itf;
     unsigned char _ttl = 0;
     int _fd = -1;
@@ -104,11 +153,15 @@ protected:
     OnReadFunc _on_read;
     bool _broadcast = false;
     bool _multicast = false;
+    bool _server = false;
+
+    Streams streams;
+
 };
 
 class UdpClientBase : public UdpBase {
 public:
-    UdpClientBase():UdpBase("udp client") {}
+    UdpClientBase():UdpBase("udp client",false) {}
     auto start_with(IOLoop* loop) -> error_c override {
         FD watcher(_fd);
         _fd = socket(AF_INET, SOCK_DGRAM | SOCK_NONBLOCK, 0);
@@ -142,7 +195,7 @@ public:
 
 class UdpServerBase : public UdpBase {
 public:
-    UdpServerBase():UdpBase("udp server") {}
+    UdpServerBase():UdpBase("udp server",true) {}
     auto start_with(IOLoop* loop) -> error_c override {
         FD watcher(_fd);
         _fd = socket(AF_INET, SOCK_DGRAM | SOCK_NONBLOCK, 0);
@@ -193,15 +246,8 @@ public:
             _fd = -1;
         }
     }
+    auto write(const void* buf, int len) -> int override {return 0;}
 
-    auto write(const void* buf, int len) -> int override {
-        log::debug()<<"udp write"<<std::endl;
-        if (_send_addr.len() == 0) {
-            return 0;
-        }
-        log::debug()<<"send"<<std::endl;
-        return send(buf,len,_send_addr);
-    }
 };
 
 class UdpClientImpl : public UdpClient {
@@ -340,14 +386,9 @@ public:
         _is_writeable = !on_error(ec,"udp server");
     }
 
-    auto write(const void* buf, int len) -> int override {
-        log::debug()<<"svr write"<<std::endl;
-        if (!_is_writeable) return 0;
-        return _udp.write(buf,len);
+    void on_connect(OnConnectFunc func) override {
+        _udp._on_connect = func;
     }
-    void on_read(OnReadFunc func) override {
-        _udp.on_read(func);
-    };
 
     std::string _name;
     IOLoop *_loop;

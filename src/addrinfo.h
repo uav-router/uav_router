@@ -11,6 +11,7 @@ class SockAddr {
 public:
   SockAddr();
   SockAddr(SockAddr&& addr);
+  SockAddr(const SockAddr& addr);
   SockAddr(sockaddr *addr, socklen_t len);
   SockAddr(addrinfo *ai);
   SockAddr(in_addr_t address, uint16_t port);
@@ -34,11 +35,13 @@ public:
   auto operator=(const SockAddr &other) -> SockAddr &;
   auto operator=(SockAddr &&other) noexcept -> SockAddr &;
   friend auto operator<<(std::ostream &os, const SockAddr &addr) -> std::ostream&;
+  friend auto operator<(const SockAddr& addr1, const SockAddr& addr2) -> bool;
 private:
     class SockAddrImpl;
     std::unique_ptr<SockAddrImpl> _impl;
 };
 
+auto operator<(const SockAddr& addr1, const SockAddr& addr2) -> bool;
 auto operator<<(std::ostream &os, const SockAddr &addr) -> std::ostream&;
 
 class AddressResolver : public error_handler {

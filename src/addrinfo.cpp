@@ -53,6 +53,10 @@ SockAddr::SockAddr(in_addr_t address, uint16_t port):_impl{new SockAddrImpl{}} {
     _impl->addr.in.sin_port = htons(port);
     _impl->length = sizeof(sockaddr_in);
 }
+SockAddr::SockAddr(const SockAddr& addr) {
+    if (!addr._impl) return;
+    _impl = std::make_unique<SockAddrImpl>((struct sockaddr*)&(addr._impl->addr.storage),addr._impl->length);
+}
 void SockAddr::init(struct sockaddr *addr, socklen_t len) {
     if (!_impl) _impl = std::make_unique<SockAddrImpl>();
     _impl->init(addr,len);
@@ -136,6 +140,15 @@ auto SockAddr::operator=(SockAddr&& other) noexcept -> SockAddr& {
     if (this != &other) { _impl = std::move(other._impl);
     }
     return *this;
+}
+
+auto operator<(const SockAddr& addr1, const SockAddr& addr2) -> bool {
+    if (!addr1._impl && !addr2._impl) return true;
+    if (addr1._impl && addr2._impl) {
+        if (addr1._impl->length != addr2._impl->length) return addr1._impl->length < addr2._impl->length;
+        return memcmp(&addr1._impl->addr,&addr2._impl->addr,addr1._impl->length)<0;
+    }
+    return bool(addr1._impl);
 }
 
 auto operator<<(std::ostream &os, const SockAddr &addr) -> std::ostream& {

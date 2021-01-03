@@ -15,13 +15,20 @@ public:
     static auto create(const std::string& name) -> std::unique_ptr<UdpClient>;
 };
 
-class UdpServer : public IOWriteable, public error_handler {
+class UdpStream: public IOWriteable {
 public:
+  virtual void on_read(OnReadFunc func) = 0;
+};
+
+
+class UdpServer : public error_handler {
+public:
+    using OnConnectFunc = std::function<void(std::shared_ptr<UdpStream>&)>;
     virtual void init(uint16_t port, IOLoop* loop, const std::string& host="") = 0;
     virtual void init_interface(const std::string& interface, uint16_t port, IOLoop* loop) = 0;
     virtual void init_broadcast(uint16_t port, IOLoop* loop, const std::string& interface="") = 0;
     virtual void init_multicast(const std::string& address, uint16_t port, IOLoop* loop, const std::string& interface="") = 0;
-    virtual void on_read(OnReadFunc func) = 0;
+    virtual void on_connect(OnConnectFunc func) = 0;
     static auto create(const std::string& name) -> std::unique_ptr<UdpServer>;
 };
 
