@@ -134,7 +134,7 @@ int udp_multicast_test() {
         std::cout<<std::endl;
     });
     client->on_connect([&client]() {
-        std::cout<<"on connect "<<client->write("Hello mcast!", 6)<<std::endl;
+        std::cout<<"on connect "<<client->write("Hello mcast!", 13)<<std::endl;
     });
     client->on_error([](const error_c& ec) {
         std::cout<<"Udp socket error:"<<ec.place()<<": "<<ec.message()<<std::endl;

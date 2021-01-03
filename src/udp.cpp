@@ -161,7 +161,8 @@ public:
                 ret = err_chk(setsockopt(_fd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes)),"multicast reuseaddr");
                 if (ret) return ret;
             }
-            SockAddr any(INADDR_ANY, _addr.port());
+            SockAddr any(INADDR_ANY, ntohs(_addr.port()));
+            log::debug()<<"Bind server to "<<any<<std::endl;
             ret = err_chk(bind(_fd, any.sock_addr(), any.len()), "udp server multicast bind");
             if (ret) return ret;
             ip_mreq mreq;
