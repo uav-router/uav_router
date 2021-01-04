@@ -4,6 +4,7 @@
 #include <sys/epoll.h>
 #include <sys/signalfd.h>
 #include <set>
+#include <vector>
 #include <initializer_list>
 //#include <filesystem>
 #include <libudev.h> //dnf install systemd-devel; apt-get install libudev-dev
@@ -331,9 +332,9 @@ auto IOLoop::run() -> int {
     ec = _impl->udev.start_with(this);
     if (ec) { _impl->on_error(ec);
     }
-    epoll_event events[_impl->_size];
+    std::vector<epoll_event> events(_impl->_size);
     while(!_impl->_stop) {
-        int r = _impl->_epoll.wait(events, _impl->_size);
+        int r = _impl->_epoll.wait(events.data(), events.size());
         if (r < 0) {
             errno_c err;
             if (err == std::error_condition(std::errc::interrupted)) { continue;
@@ -344,7 +345,7 @@ auto IOLoop::run() -> int {
         for (int i = 0; i < r; i++) {
             auto* obj = static_cast<IOPollable *>(events[i].data.ptr);
             auto evs = events[i].events;
-            log::debug()<<obj->name<<" event "<<evs<<std::endl;
+            log::debug()<<obj->name<<" event "<<evs<<" obj "<<obj<<std::endl;
             if (obj->epollEvent(evs)) continue;
             if (evs & EPOLLIN) {
                 log::debug()<<"EPOLLIN"<<std::endl;

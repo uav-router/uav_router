@@ -5,7 +5,7 @@
 namespace log {
     class NullBuffer : public std::streambuf {
     public:
-      int overflow(int c) { return c; }
+      auto overflow(int c) -> int final { return c; }
     };
     NullBuffer null_buffer;
     std::ostream null_stream(&null_buffer);
@@ -21,7 +21,7 @@ namespace log {
         use_color = isatty(STDERR_FILENO);
     }
 
-    std::ostream& log(Level level) {
+    auto log(Level level) -> std::ostream& {
         if (max_level<level) return null_stream;
         if (use_color) {
             switch (level) {
@@ -44,9 +44,9 @@ namespace log {
         return std::cerr;
     }
 
-    std::ostream& debug()   { return log(Level::DEBUG);  }
-    std::ostream& info()    { return log(Level::INFO);   }
-    std::ostream& notice()  { return log(Level::NOTICE); }
-    std::ostream& warning() { return log(Level::WARNING);}
-    std::ostream& error()   { return log(Level::ERROR);  }
+    auto debug() -> std::ostream&   { return log(Level::DEBUG);  }
+    auto info() -> std::ostream&    { return log(Level::INFO);   }
+    auto notice() -> std::ostream&  { return log(Level::NOTICE); }
+    auto warning() -> std::ostream& { return log(Level::WARNING);}
+    auto error() -> std::ostream&   { return log(Level::ERROR);  }
 }

@@ -41,7 +41,7 @@ public:
             log::debug()<<"write not writable"<<std::endl;
             return 0;
         }
-        int ret = send(_fd, buf, len, 0);
+        int ret = send(_fd, buf, len, MSG_NOSIGNAL);
         if (ret==-1) {
             errno_c err;
             on_error(err, "TCP send datagram");
@@ -62,7 +62,8 @@ public:
 
     auto epollIN() -> int override {
         errno_c ret = check();
-        if (ret) {    on_error(ret);
+        if (ret) {    
+            on_error(ret);
         } else while(true) {
             int sz;
             ret = err_chk(ioctl(_fd, FIONREAD, &sz),"tcp ioctl");
@@ -274,20 +275,26 @@ public:
     }
     auto start_with(IOLoop* loop) -> error_c override {
         _loop = loop;
-        return loop->add(_fd, EPOLLIN | EPOLLOUT, this);
+        return loop->add(_fd, EPOLLIN | EPOLLOUT | EPOLLET, this);
     }
     void cleanup() override {
         if (_fd != -1) {
             close(_fd);
+            _fd = -1;
         }
     }
     auto write(const void* buf, int len) -> int override {
         if (!_is_writeable) return 0;
-        ssize_t n = send(_fd, buf, len, 0);
+        ssize_t n = send(_fd, buf, len, MSG_NOSIGNAL);
         _is_writeable = n==len;
         if (n==-1) {
             errno_c ret;
             if (ret != std::error_condition(std::errc::resource_unavailable_try_again)) {
+                if (ret==std::error_condition(std::errc::broken_pipe)) {
+                    _loop->del(_fd,this);
+                    cleanup();
+                    if (_on_close) _on_close();
+                }
                 on_error(ret, "tcp send");
             }
         }

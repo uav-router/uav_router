@@ -1,5 +1,6 @@
 #include <netinet/in.h>
 #include <unistd.h>
+#include <netdb.h>
 #include <cstring>
 #include <csignal>
 #include <ifaddrs.h>
@@ -13,6 +14,7 @@
 
 #include <chrono>
 #include <memory>
+#include <cerrno>
 #include <array>
 using namespace std::chrono_literals;
 

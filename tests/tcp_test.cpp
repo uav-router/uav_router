@@ -6,6 +6,10 @@
 #include <err.h>
 #include <epoll.h>
 #include <tcp.h>
+#include <timer.h>
+#include <utility>
+using namespace std::chrono_literals;
+
 
 void print_addr(const struct sockaddr *sa, socklen_t salen) {
     char host[NI_MAXHOST];
@@ -43,26 +47,37 @@ int tcp_client_test() {
 int tcp_test() {
     IOLoop loop;
     
-    auto client = TcpClient::create("ServerEndpoint");
-    client->init("192.168.0.25",10000,&loop);
-    client->on_error([](const error_c& ec) {
-        std::cout<<"Tcp socket error:"<<ec.place()<<": "<<ec.message()<<std::endl;
+    std::unique_ptr<TcpClient> client;
+    Timer timer;
+    int tryno = 0;
+    timer.on_shoot_func([&client,&tryno, &loop](){
+        client = TcpClient::create("ClientEndpoint");
+        client->init("192.168.0.25",10000,&loop);
+        client->on_error([](const error_c& ec) {
+            std::cout<<"Tcp client socket error:"<<ec.place()<<": "<<ec.message()<<std::endl;
+        });
+        client->on_read([](void* buf, int len) {
+            std::cout<<"Tcp client: ";
+            std::cout.write((char*)buf,len);
+            std::cout<<std::endl;
+        });
+        client->on_connect([&client,&tryno]() {
+            std::cout<<"client socket connected"<<std::endl;
+            char buf[256];
+            int size = snprintf(buf,sizeof(buf),"Hello %i!",tryno++);
+            client->write(buf,size);
+            std::cout<<"client connect func end"<<std::endl;
+        });
+        client->on_close([]() {
+            std::cout<<"socket disconnected"<<std::endl;
+        });
     });
-    client->on_read([](void* buf, int len) {
-        std::cout<<"Tcp client: ";
-        std::cout.write((char*)buf,len);
-        std::cout<<std::endl;
-    });
-    client->on_connect([&client]() {
-        std::cout<<"socket connected"<<std::endl;
-        client->write("Hello!",6);
-    });
-    client->on_close([]() {
-        std::cout<<"socket disconnected"<<std::endl;
-    });
+    timer.init_periodic(3s);
+    timer.start_with(&loop);
 
-    auto server = TcpServer::create("ClientEndpoint");
+    
     std::unordered_set<std::unique_ptr<TcpSocket>> sockets;
+    auto server = TcpServer::create("ServerEndpoint");
     server->init(10000,&loop);
     server->on_connect([&sockets](std::unique_ptr<TcpSocket>& socket, sockaddr* addr, socklen_t len){
         print_addr(addr,len);
@@ -81,7 +96,7 @@ int tcp_test() {
                 std::cout<<"Tcp socket closed end "<<sockets.size()<<std::endl;
             });
             (*sock)->on_error([](const error_c& ec) {
-                std::cout<<"Tcp socket error:"<<ec.place()<<": "<<ec.message()<<std::endl;
+                std::cout<<"Tcp server socket error:"<<ec.place()<<": "<<ec.message()<<std::endl;
             });
         } else {
             std::cout<<"Error: socket can not inserted to set"<<std::endl;

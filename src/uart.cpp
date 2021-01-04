@@ -11,6 +11,7 @@
 
 #include <map>
 #include <chrono>
+#include <cerrno>
 #include <utility>
 using namespace std::chrono_literals;
 
