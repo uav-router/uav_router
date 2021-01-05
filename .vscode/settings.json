@@ -58,6 +58,8 @@
         "compare": "cpp",
         "concepts": "cpp",
         "csignal": "cpp",
-        "ranges": "cpp"
+        "ranges": "cpp",
+        "cinttypes": "cpp",
+        "variant": "cpp"
     }
 }
