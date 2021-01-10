@@ -11,7 +11,7 @@ public:
     virtual void on_read(OnReadFunc func) = 0;
     virtual void on_connect(OnEventFunc func) = 0;
     virtual void on_close(OnEventFunc func) = 0;
-    static std::unique_ptr<UART> create(const std::string& name);
+    static auto create(const std::string& name) -> std::unique_ptr<UART>;
 };
 
 #endif //__UART_H__

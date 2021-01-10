@@ -1,5 +1,5 @@
-#ifndef INFLUX_MEASURE_H
-#define INFLUX_MEASURE_H
+#ifndef _MEASURE_H_
+#define _MEASURE_H_
 
 #include <string>
 #include <string_view>
@@ -8,9 +8,7 @@
 #include <sstream>
 #include <memory>
 
-namespace influxdb
-{
-
+// Class for create single measurement
 class Measure
 {
   public:
@@ -28,6 +26,17 @@ class Measure
     std::unique_ptr<MeasureImpl> _impl;
 };
 
-} // namespace influxdb
+// Class to send measurements
+class OStat {
+public:
+    virtual void send(Measure&& metric) = 0;
+    virtual void flush() = 0;
+};
 
-#endif // INFLUX_MEASURE_H
+// Base class to send collected stats
+class Stat {
+public:
+    virtual void report(OStat& out) = 0;
+};
+
+#endif // _MEASURE_H_

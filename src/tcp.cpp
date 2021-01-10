@@ -95,6 +95,7 @@ public:
 
     auto epollOUT() -> int override {
         is_writeable = true;
+        write_allowed();
         if (!is_connected) {
             if (_on_connect) _on_connect();
             is_connected=true;
@@ -169,6 +170,7 @@ public:
             if (ret) { on_error(ret,_name);
             }
         });
+        _tcp.on_write_allowed([this](){write_allowed();});
     }
     void init(const std::string& host, uint16_t port, IOLoop* loop) override {
         _loop = loop;
@@ -253,6 +255,7 @@ public:
     }
     auto epollOUT() -> int override {
         _is_writeable = true;
+        write_allowed();
         return HANDLED;
     }
     auto epollERR() -> int override {

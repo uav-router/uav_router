@@ -30,7 +30,9 @@ public:
     using Streams = std::map<SockAddr, std::shared_ptr<UdpStream>>;
     class UdpStreamImpl final : public UdpStream {
     public:
-        UdpStreamImpl(SockAddr addr, UdpBase* s):_addr(std::move(addr)),_socket(s) {}
+        UdpStreamImpl(SockAddr addr, UdpBase* s):_addr(std::move(addr)),_socket(s) {
+            _socket->on_write_allowed([this](){write_allowed();});
+        }
         void on_read(OnReadFunc func) override {
             _on_read = func;
         }
@@ -122,6 +124,7 @@ public:
     }
     auto epollOUT() -> int override {
         is_writeable = true;
+        write_allowed();
         return HANDLED;
     }
 
@@ -256,6 +259,7 @@ public:
         auto on_err = [this](error_c& ec){ on_error(ec,_name);};
         _udp.on_error(on_err);
         _addr_resolver->on_error(on_err);
+        _udp.on_write_allowed([this](){write_allowed();});
     }
     void execute() {
         error_c ec = _loop->execute(&_udp);

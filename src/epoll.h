@@ -5,8 +5,12 @@
 #include <functional>
 #include <string>
 #include <utility>
+#include <chrono>
 #include "err.h"
+#include "measure.h"
 
+using OnReadFunc  = std::function<void(void*, int)>;
+using OnEventFunc = std::function<void()>;
 
 class IOLoop;
 
@@ -14,6 +18,11 @@ class IOWriteable {
 public:
     virtual ~IOWriteable() = default;
     virtual auto write(const void* buf, int len) -> int = 0;
+    void on_write_allowed(OnEventFunc func) {_write_allowed = func;}
+protected:
+    void write_allowed() {if (_write_allowed) _write_allowed(); }
+private:
+    OnEventFunc _write_allowed;
 };
 
 class IOPollable {
@@ -52,14 +61,13 @@ public:
     void udev_stop_watch(IOPollable* obj);
     auto udev_find_id(const std::string& path) -> std::string;
     auto udev_find_path(const std::string& id) -> std::string;
+    void register_report(Stat* source, std::chrono::nanoseconds period);
+    void unregister_report(Stat* source);
     auto run() -> int;
     void stop();
 private:
     class IOLoopImpl;
     std::unique_ptr<IOLoopImpl> _impl;
 };
-
-using OnReadFunc  = std::function<void(void*, int)>;
-using OnEventFunc = std::function<void()>;
 
 #endif //__EPOLL_H__

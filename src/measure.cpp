@@ -5,9 +5,6 @@
 #include <memory>
 #include <sstream>
 
-namespace influxdb
-{
-
 class Measure::MeasureImpl {
 public:
     MeasureImpl(std::string name):_name(std::move(name)),_time(std::chrono::system_clock::now()) {}
@@ -66,5 +63,3 @@ auto Measure::time(std::chrono::time_point<std::chrono::system_clock> stamp) -> 
 void Measure::to_stream(std::ostream& out, std::string_view global_tags) {
     _impl->to_stream(out,global_tags);
 }
-
-} // namespace influxdb

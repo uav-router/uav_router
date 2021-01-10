@@ -50,7 +50,8 @@ int tcp_test() {
     std::unique_ptr<TcpClient> client;
     Timer timer;
     int tryno = 0;
-    timer.on_shoot_func([&client,&tryno, &loop](){
+    bool first_write = true;
+    timer.on_shoot_func([&client,&tryno, &loop, &first_write](){
         client = TcpClient::create("ClientEndpoint");
         client->init("192.168.0.25",10000,&loop);
         client->on_error([](const error_c& ec) {
@@ -61,14 +62,25 @@ int tcp_test() {
             std::cout.write((char*)buf,len);
             std::cout<<std::endl;
         });
-        client->on_connect([&client,&tryno]() {
+        client->on_write_allowed([&client,&tryno, &first_write]() {
+            std::cout<<"client socket write allowed "<<first_write<<std::endl;
+            if (!first_write) return;
+            first_write = false;
             std::cout<<"client socket connected"<<std::endl;
             char buf[256];
             int size = snprintf(buf,sizeof(buf),"Hello %i!",tryno++);
             client->write(buf,size);
             std::cout<<"client connect func end"<<std::endl;
         });
-        client->on_close([]() {
+        /*client->on_connect([&client,&tryno]() {
+            std::cout<<"client socket connected"<<std::endl;
+            char buf[256];
+            int size = snprintf(buf,sizeof(buf),"Hello %i!",tryno++);
+            client->write(buf,size);
+            std::cout<<"client connect func end"<<std::endl;
+        });*/
+        client->on_close([&first_write]() {
+            first_write = true;
             std::cout<<"socket disconnected"<<std::endl;
         });
     });

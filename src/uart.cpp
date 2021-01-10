@@ -187,6 +187,7 @@ public:
 
     auto epollOUT() -> int override {
         _is_writeable = true;
+        write_allowed();
         return HANDLED;
     }
 
