@@ -53,16 +53,22 @@ class IOLoop {
 public:
     IOLoop(int size=8);
     ~IOLoop();
+    // poll
     auto execute(IOPollable* obj) -> error_c;
     auto add(int fd, uint32_t events, IOPollable* obj) -> errno_c;
     auto mod(int fd, uint32_t events, IOPollable* obj) -> errno_c;
     auto del(int fd, IOPollable* obj) -> errno_c;
+    // udev
     void udev_start_watch(IOPollable* obj);
     void udev_stop_watch(IOPollable* obj);
     auto udev_find_id(const std::string& path) -> std::string;
     auto udev_find_path(const std::string& id) -> std::string;
+    // stats
+    void add_stat_output(std::unique_ptr<OStat> out);
+    void clear_stat_outputs();
     void register_report(Stat* source, std::chrono::nanoseconds period);
     void unregister_report(Stat* source);
+    // run
     auto run() -> int;
     void stop();
 private:

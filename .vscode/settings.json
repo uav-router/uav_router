@@ -60,6 +60,7 @@
         "csignal": "cpp",
         "ranges": "cpp",
         "cinttypes": "cpp",
-        "variant": "cpp"
+        "variant": "cpp",
+        "strstream": "cpp"
     }
 }

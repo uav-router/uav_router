@@ -4,14 +4,17 @@
 #include <sys/epoll.h>
 #include <sys/signalfd.h>
 #include <set>
+#include <map>
 #include <vector>
 #include <initializer_list>
+#include <utility>
 //#include <filesystem>
 #include <libudev.h> //dnf install systemd-devel; apt-get install libudev-dev
 
 #include "log.h"
 #include "err.h"
 #include "epoll.h"
+#include "timer.h"
 
 class Epoll {
 public:
@@ -162,6 +165,11 @@ public:
                 if (link.rfind("/dev/serial/by-id/",0)==0) {
                     dev_id = link;
                 }
+                //std::filesystem::path link = udev_list_entry_get_name(list_entry);
+                //if (link.parent_path()=="/dev/serial/by-id/") {
+                //    dev_id = link;
+                //}
+
                 if (!device_found) device_found = link==path;
             }
             if (device_found) {
@@ -230,6 +238,71 @@ private:
     OnActionFunc _on_action;
 };
 
+class OStatSet : public OStat {
+public:
+    void send(Measure&& metric) override {
+        for(auto& ostat:ostats) ostat->send(std::forward<Measure>(metric));
+    }
+    void flush() override {
+        for(auto& ostat:ostats) ostat->flush();
+    }
+    std::set<std::unique_ptr<OStat>> ostats;
+};
+
+class PeriodicStatCall {
+public:
+    PeriodicStatCall() {
+        _timer.on_shoot_func([this](){
+            if (!_sink) {
+                stop();
+                return;
+            }
+            for(auto stat: _stats) { stat->report(*_sink);
+            }
+            _sink->flush();
+        });
+        _timer.on_error([](const error_c& ec) {
+            std::cout<<"metrics timer error:"<<ec.place()<<": "<<ec.message()<<std::endl;
+        });
+    };
+    void setup(std::chrono::nanoseconds period, IOLoop* loop) {
+        _loop = loop;
+        _period = period;
+    }
+    void start() {
+        if (_is_started) return;
+        _timer.init_periodic(_period);
+        error_c ec = _timer.start_with(_loop);
+        if (ec) { 
+            log::error()<<"Error starting metrics timer"<<ec.place()<<": "<<ec.message()<<std::endl;
+            return;
+        }
+        _is_started = true;
+    }
+    void stop() {
+        if (!_is_started) return;
+        _timer.stop();
+        _is_started = false;
+    }
+    void add(Stat* source, OStatSet* sink) {
+        _stats.insert(source);
+        _sink = sink;
+        if (!_is_started) start();
+    }
+    void remove(Stat* source) {
+        _stats.erase(source);
+        if (_stats.size()==0 && _is_started) { stop();
+        }
+    }
+
+    bool _is_started = false;
+    Timer _timer;
+    OStatSet* _sink = nullptr;
+    IOLoop* _loop = nullptr;
+    std::set<Stat*> _stats;
+    std::chrono::nanoseconds _period;
+};
+
 class IOLoop::IOLoopImpl {
 public:
     IOLoopImpl(int size=8):_size(size) {
@@ -254,6 +327,8 @@ public:
     bool _stop = false;
     std::set<IOPollable*> watches;
     std::set<IOPollable*> udev_watches;
+    OStatSet ostats;
+    std::map<std::chrono::nanoseconds, PeriodicStatCall> statcalls;
 };
 
 IOLoop::IOLoop(int size):_impl{new IOLoopImpl{size}} {}
@@ -390,3 +465,28 @@ auto IOLoop::run() -> int {
 }
 
 void IOLoop::stop() { _impl->_stop=true; }
+
+void IOLoop::add_stat_output(std::unique_ptr<OStat> out) {
+    bool ostats_empty = _impl->ostats.ostats.empty();
+    _impl->ostats.ostats.insert(std::move(out));
+    if (ostats_empty && !_impl->statcalls.empty()) {
+        for(auto& statcall: _impl->statcalls) { statcall.second.start();
+        }
+    }
+}
+void IOLoop::clear_stat_outputs() {
+    for(auto& statcall: _impl->statcalls) {
+        statcall.second.stop();
+    }
+    _impl->ostats.ostats.clear();
+}
+void IOLoop::register_report(Stat* source, std::chrono::nanoseconds period) {
+    auto& statcall = _impl->statcalls[period];
+    statcall.setup(period, this);
+    statcall.add(source, &_impl->ostats);
+}
+void IOLoop::unregister_report(Stat* source) {
+    for(auto& statcall: _impl->statcalls) {
+        statcall.second.remove(source);
+    }
+}

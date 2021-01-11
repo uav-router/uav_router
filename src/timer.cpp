@@ -81,6 +81,12 @@ auto Timer::start_with(IOLoop* loop) -> error_c {
     _impl->_loop = loop;
     return loop->add(_impl->_fd, EPOLLIN, this);
 }
+
+void Timer::stop() {
+    _impl->_loop->del(_impl->_fd, this);
+    cleanup();
+}
+
 void Timer::cleanup() {
     close(_impl->_fd);
 }

@@ -12,24 +12,24 @@ class eai_category_impl:
     public std::error_category
 {
 public:
-    virtual const char * name() const noexcept {
+    [[nodiscard]]  auto name() const noexcept -> const char * override {
         return "addrinfo";
     }
-    virtual std::string message(int ev) const {
+    [[nodiscard]]  auto message(int ev) const -> std::string override {
         return gai_strerror(ev);
     }
 };
 
 eai_category_impl eai_category_instance;
 
-const std::error_category & eai_category() {
+auto eai_category() -> const std::error_category & {
     return eai_category_instance;
 }
 
 eai_code::eai_code(int val, const std::string& place):error_c(val, eai_category(), place) {}
 eai_code::eai_code(gaicb* req, const std::string& place):error_c(gai_error(req), eai_category(), place) {}
 
-bool error_handler::on_error(error_c& ec, const std::string& place) {
+auto error_handler::on_error(error_c& ec, const std::string& place) -> bool {
     if (!ec) return false;
     if (!place.empty()) ec.add_place(place);
     if (_on_error) { _on_error(ec);
@@ -39,7 +39,7 @@ bool error_handler::on_error(error_c& ec, const std::string& place) {
     return true;
 }
 
-bool error_handler::on_error(int ret, const std::string& place) {
+auto error_handler::on_error(int ret, const std::string& place) -> bool {
     if (!ret) return false;
     errno_c ec;
     if (!place.empty()) ec.add_place(place);

@@ -9,13 +9,14 @@
 class Timer : public IOPollable, public error_handler {
 public:
     Timer();
-    ~Timer();
+    ~Timer() override;
     void init_periodic(std::chrono::nanoseconds timeout);
     void init_oneshoot(std::chrono::nanoseconds timeout);
     void init(int clockid, const itimerspec * value, int flags);
     void on_shoot_func(OnEventFunc func);
-    int epollIN() override;
-    error_c start_with(IOLoop* loop) override;
+    auto epollIN() -> int override;
+    auto start_with(IOLoop* loop) -> error_c override;
+    void stop();
     void cleanup() override;
 private:
     class TimerImpl;

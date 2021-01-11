@@ -22,8 +22,10 @@ class Measure
     void to_stream(std::ostream& out, std::string_view global_tags="");
 
   private:
-    class MeasureImpl;
-    std::unique_ptr<MeasureImpl> _impl;
+    std::string _name;
+    std::chrono::time_point<std::chrono::system_clock> _time;
+    std::stringstream _tags;
+    std::stringstream _fields;
 };
 
 // Class to send measurements
@@ -31,12 +33,14 @@ class OStat {
 public:
     virtual void send(Measure&& metric) = 0;
     virtual void flush() = 0;
+    virtual ~OStat() = default;
 };
 
 // Base class to send collected stats
 class Stat {
 public:
     virtual void report(OStat& out) = 0;
+    virtual ~Stat() = default;
 };
 
 #endif // _MEASURE_H_
