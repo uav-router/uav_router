@@ -4,7 +4,7 @@
 
 #include <log.h>
 #include <err.h>
-#include <epoll.h>
+#include <loop.h>
 #include <tcp.h>
 #include <timer.h>
 #include <utility>

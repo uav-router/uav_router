@@ -13,7 +13,7 @@
 
 #include "log.h"
 #include "err.h"
-#include "epoll.h"
+#include "loop.h"
 #include "timer.h"
 
 class Epoll {
@@ -240,8 +240,8 @@ private:
 
 class OStatSet : public OStat {
 public:
-    void send(Measure&& metric) override {
-        for(auto& ostat:ostats) ostat->send(std::forward<Measure>(metric));
+    void send(Metric&& metric) override {
+        for(auto& ostat:ostats) ostat->send(std::forward<Metric>(metric));
     }
     void flush() override {
         for(auto& ostat:ostats) ostat->flush();
@@ -303,6 +303,19 @@ public:
     std::chrono::nanoseconds _period;
 };
 
+class LoopStat : public Stat {
+public:
+    void report(OStat& out) override {
+        Metric meter("Timings");
+        meter.add_tag("source","loop");
+        for(auto& item : time_measure) {
+            item.second.report(meter,item.first);
+        }
+        out.send(std::move(meter));
+    }
+    std::map<std::string,DurationCollector> time_measure;
+};
+
 class IOLoop::IOLoopImpl {
 public:
     IOLoopImpl(int size=8):_size(size) {
@@ -329,6 +342,7 @@ public:
     std::set<IOPollable*> udev_watches;
     OStatSet ostats;
     std::map<std::chrono::nanoseconds, PeriodicStatCall> statcalls;
+    LoopStat stat;
 };
 
 IOLoop::IOLoop(int size):_impl{new IOLoopImpl{size}} {}
@@ -387,6 +401,7 @@ auto IOLoop::run() -> int {
     _impl->udev.on_action([this](udev_device* dev){
         std::string action = udev_device_get_action(dev);
         std::string node = udev_device_get_devnode(dev);
+        _impl->ostats.send(Metric("udev").field("dev",1).tag("action",action).tag("node",node));
         std::string link;
         udev_list_entry *list_entry;
         udev_list_entry_foreach(list_entry, udev_device_get_devlinks_list_entry(dev)) {
@@ -425,35 +440,41 @@ auto IOLoop::run() -> int {
             if (evs & EPOLLIN) {
                 log::debug()<<"EPOLLIN"<<std::endl;
                 int ret = obj->epollIN();
+                auto s = _impl->stat.time_measure["in"].measure();
                 if (ret==IOPollable::NOT_HANDLED) log::warning()<<obj->name<<" EPOLLIN not handled"<<std::endl;
                 if (ret==IOPollable::STOP) continue;
             }
             if (evs & EPOLLOUT) {
                 log::debug()<<"EPOLLOUT"<<std::endl;
+                auto s = _impl->stat.time_measure["out"].measure();
                 int ret = obj->epollOUT();
                 if (ret==IOPollable::NOT_HANDLED) log::warning()<<obj->name<<" EPOLLOUT not handled"<<std::endl;
                 if (ret==IOPollable::STOP) continue;
             }
             if (evs & EPOLLPRI) {
                 log::debug()<<"EPOLLPRI"<<std::endl;
+                auto s = _impl->stat.time_measure["pri"].measure();
                 int ret = obj->epollPRI();
                 if (ret==IOPollable::NOT_HANDLED) log::warning()<<obj->name<<" EPOLLPRI not handled"<<std::endl;
                 if (ret==IOPollable::STOP) continue;
             }
             if (evs & EPOLLERR) {
                 log::debug()<<"EPOLLERR"<<std::endl;
+                auto s = _impl->stat.time_measure["err"].measure();
                 int ret = obj->epollERR();
                 if (ret==IOPollable::NOT_HANDLED) log::warning()<<obj->name<<" EPOLLERR not handled"<<std::endl;
                 if (ret==IOPollable::STOP) continue;
             }
             if (evs & EPOLLHUP) {
                 log::debug()<<"EPOLLHUP"<<std::endl;
+                auto s = _impl->stat.time_measure["hup"].measure();
                 int ret = obj->epollHUP();
                 if (ret==IOPollable::NOT_HANDLED) log::warning()<<obj->name<<" EPOLLHUP not handled"<<std::endl;
                 if (ret==IOPollable::STOP) continue;
             }
             if (evs & EPOLLRDHUP) {
                 log::debug()<<"EPOLLRDHUP"<<std::endl;
+                auto s = _impl->stat.time_measure["rdhup"].measure();
                 int ret = obj->epollRDHUP();
                 if (ret==IOPollable::NOT_HANDLED) log::warning()<<obj->name<<" EPOLLRDHUP not handled"<<std::endl;
                 if (ret==IOPollable::STOP) continue;

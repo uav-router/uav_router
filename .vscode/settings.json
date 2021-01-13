@@ -61,6 +61,8 @@
         "ranges": "cpp",
         "cinttypes": "cpp",
         "variant": "cpp",
-        "strstream": "cpp"
+        "strstream": "cpp",
+        "queue": "cpp",
+        "codecvt": "cpp"
     }
 }

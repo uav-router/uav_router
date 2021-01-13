@@ -8,9 +8,9 @@
 template<class... Ts> struct overloaded : Ts... { using Ts::operator()...; };
 template<class... Ts> overloaded(Ts...) -> overloaded<Ts...>;
 
-Measure::Measure(std::string name):_name(std::move(name)),_time(std::chrono::system_clock::now()) {}
+Metric::Metric(std::string name):_name(std::move(name)),_time(std::chrono::system_clock::now()) {}
 
-auto Measure::field(std::string_view name, std::variant<int, long long int, std::string, double> value) -> Measure&& {
+void Metric::add_field(std::string_view name, std::variant<int, long long int, std::string, double, std::chrono::nanoseconds> value) {
     if (_fields.tellp()!=0) _fields << ",";
     _fields << name << "=";
     std::visit([this](auto&& v) {
@@ -23,22 +23,33 @@ auto Measure::field(std::string_view name, std::variant<int, long long int, std:
             _fields << v;
         else if constexpr (std::is_same_v<T, std::string>)
             _fields << '"' << v << '"';
+        else if constexpr (std::is_same_v<T, std::chrono::nanoseconds>)
+            _fields << v.count() << 'i';
       }, value);
+}
+
+auto Metric::field(std::string_view name, std::variant<int, long long int, std::string, double, std::chrono::nanoseconds> value) -> Metric&& {
+    add_field(name, value);
     return std::move(*this);
 }
 
-auto Measure::tag(std::string_view key, std::string_view value) -> Measure&& {
+void Metric::add_tag(std::string_view key, std::string_view value) {
     _tags <<"," << key << "=" << value;
+}
+
+auto Metric::tag(std::string_view key, std::string_view value) -> Metric&& {
+    add_tag(key, value);
     return std::move(*this);
 }
 
-auto Measure::time(std::chrono::time_point<std::chrono::system_clock> stamp) -> Measure&& {
+auto Metric::time(std::chrono::time_point<std::chrono::system_clock> stamp) -> Metric&& {
     _time = stamp;
     return std::move(*this);
 }
 
-void Measure::to_stream(std::ostream& out, std::string_view global_tags) {
+void Metric::to_stream(std::ostream& out, std::string_view global_tags) {
     using namespace std::chrono;
+    if (_fields.tellp()==0) return;
     out<<_name<<_tags.str();
     if (global_tags.size()!=0) { out<<global_tags;
     }
