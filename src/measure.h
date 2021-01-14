@@ -56,10 +56,10 @@ public:
     }
     void report(Metric& out, std::string name) {
         if (!count) return;
-        out.add_field(name+"_t",all);
-        out.add_field(name+"_max",max);
-        out.add_field(name+"_min",min);
-        out.add_field(name+"_cnt",count);
+        if (all!=Duration::zero()) out.add_field(name+"_t",all);
+        if (max!=Duration::zero()) out.add_field(name+"_max",max);
+        if (min!=Duration::max()) out.add_field(name+"_min",min);
+        if (count!=0) out.add_field(name+"_cnt",count);
         min = Duration::max();
         max = Duration::zero();
     }

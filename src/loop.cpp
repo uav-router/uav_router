@@ -8,6 +8,8 @@
 #include <vector>
 #include <initializer_list>
 #include <utility>
+#include <chrono>
+using namespace std::chrono_literals;
 //#include <filesystem>
 #include <libudev.h> //dnf install systemd-devel; apt-get install libudev-dev
 
@@ -306,8 +308,7 @@ public:
 class LoopStat : public Stat {
 public:
     void report(OStat& out) override {
-        Metric meter("Timings");
-        meter.add_tag("source","loop");
+        Metric meter("loop");
         for(auto& item : time_measure) {
             item.second.report(meter,item.first);
         }
@@ -419,6 +420,7 @@ auto IOLoop::run() -> int {
             }
         }
     });
+    register_report(&_impl->stat,100ms);
     ec = _impl->udev.start_with(this);
     if (ec) { _impl->on_error(ec);
     }

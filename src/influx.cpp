@@ -56,7 +56,9 @@ public:
         while(ps) {
             auto str = std::move(_pack.rdbuf()->str());
             int ret = _udp->write(str.c_str(),ps);
-            if (ret==ps) { _pack.str("");
+            if (ret==ps) { 
+                _pack.str("");
+                ps = 0;
             } else break;
             while(_queue.size()) {
                 _pack<<_queue.back()<<'\n';

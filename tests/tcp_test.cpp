@@ -8,6 +8,7 @@
 #include <tcp.h>
 #include <timer.h>
 #include <utility>
+#include <influx.h>
 using namespace std::chrono_literals;
 
 
@@ -121,6 +122,9 @@ int tcp_test() {
         std::cout<<"Tcp server error:"<<ec.place()<<": "<<ec.message()<<std::endl;
     });
 
+    auto influx = InfluxOStat::create();
+    influx->init("192.168.0.111", 8090, &loop);
+    loop.add_stat_output(std::move(influx));
     loop.run();
     return 0;
 }
