@@ -49,3 +49,4 @@ auto error_handler::on_error(int ret, const std::string& place) -> bool {
     }
     return true;
 }
+auto error_c::place() const -> std::string { return _place; }

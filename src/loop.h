@@ -76,4 +76,19 @@ private:
     std::unique_ptr<IOLoopImpl> _impl;
 };
 
+extern auto influx_udp(const std::string& host, 
+                uint16_t port, 
+                IOLoop* loop,
+                std::string global_tags = "",
+                int pack_size = 400,
+                int queue_max_size = 10000,
+                int queue_shrink_size = 9900) -> std::unique_ptr<OStat>;
+
+extern auto influx_file(const std::string& filename, 
+                std::string global_tags = "",
+                int pack_size = 400,
+                int queue_max_size = 10000,
+                int queue_shrink_size = 9900) -> std::unique_ptr<OStat>;
+
+
 #endif //__EPOLL_H__
