@@ -23,17 +23,23 @@ def build(bld):
         source= [ tests_dir.find_node('test.cpp') ] + sources,
         target='test',
         includes     = ['src'],
-        lib          = ['anl','udev']
+        lib          = ['anl','udev','avahi-common','avahi-client','avahi-core']
     )
     bld.program(
         source= [ tests_dir.find_node('tcp_test.cpp') ] + sources,
         target='tcptest',
         includes     = ['src'],
-        lib          = ['anl','udev']
+        lib          = ['anl','udev','avahi-common','avahi-client','avahi-core']
     )
     bld.program(
         source= [ tests_dir.find_node('udp_test.cpp') ] + sources,
         target='udptest',
         includes     = ['src'],
-        lib          = ['anl','udev']
+        lib          = ['anl','udev','avahi-common','avahi-client','avahi-core']
+    )
+    bld.program(
+        source= [ tests_dir.find_node('avahi-test.cpp') ] + sources,
+        target='avahitest',
+        includes     = ['src'],
+        lib          = ['anl','udev','avahi-common','avahi-client','avahi-core']
     )

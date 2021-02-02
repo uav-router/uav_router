@@ -33,7 +33,7 @@ public:
     int _flags;
     uint64_t _result=0;
     OnEventFunc _on_shoot;
-    IOLoop* _loop;
+    IOLoop* _loop=nullptr;
 };
 
 
@@ -68,6 +68,8 @@ auto Timer::epollIN() -> int {
     return HANDLED;
 }
 auto Timer::start_with(IOLoop* loop) -> error_c {
+    if (loop==nullptr && _impl->_loop==nullptr) return errno_c(EINVAL,"no loop specified");
+
     _impl->_fd = timerfd_create(_impl->_clockid, TFD_NONBLOCK);
     if (_impl->_fd==-1) {
         return errno_c("timerfd_create");
@@ -78,8 +80,8 @@ auto Timer::start_with(IOLoop* loop) -> error_c {
         ret.add_place("timerfd_settime");
         return ret;
     }
-    _impl->_loop = loop;
-    return loop->add(_impl->_fd, EPOLLIN, this);
+    if (loop) _impl->_loop = loop;
+    return _impl->_loop->add(_impl->_fd, EPOLLIN, this);
 }
 
 void Timer::stop() {

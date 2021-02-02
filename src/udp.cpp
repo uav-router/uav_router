@@ -213,7 +213,7 @@ public:
             int yes = 1;
             error_c ret = err_chk(setsockopt(_fd, SOL_SOCKET, SO_REUSEPORT, &yes, sizeof(yes)),"reuse port");
             if (ret) {
-                log::warning()<<"Multicast settings: "<<ret.place()<<": "<<ret.message()<<std::endl;
+                log::warning()<<"Multicast settings: "<<ret<<std::endl;
                 ret = err_chk(setsockopt(_fd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes)),"multicast reuseaddr");
                 if (ret) return ret;
             }

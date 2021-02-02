@@ -63,6 +63,46 @@
                 }
             ],
             "miDebuggerPath": "/bin/gdb"
+        },
+        {
+            "name": "avahi-pub",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/bintest/avahi-pub",
+            "args": [],
+            "stopAtEntry": true,
+            "cwd": "${workspaceFolder}",
+            "environment": [],
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                }
+            ],
+            "miDebuggerPath": "/bin/gdb"
+        },
+        {
+            "name": "avahi-browse",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/bintest/avahi-browse",
+            "args": [],
+            "stopAtEntry": true,
+            "cwd": "${workspaceFolder}",
+            "environment": [],
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                }
+            ],
+            "miDebuggerPath": "/bin/gdb"
         }
     ]
 }

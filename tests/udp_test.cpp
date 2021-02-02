@@ -18,7 +18,7 @@ int udp_client_test() {
         std::cout<<"on connect "<<udp->write("Hello!", 6)<<std::endl;
     });
     udp->on_error([](const error_c& ec) {
-        std::cout<<"Udp socket error:"<<ec.place()<<": "<<ec.message()<<std::endl;
+        std::cout<<"Udp socket error:"<<ec<<std::endl;
     });
     loop.run();
     return 0;
@@ -58,7 +58,7 @@ int udp_test() {
         });
     });
     server->on_error([](const error_c& ec) {
-        std::cout<<"Udp socket error:"<<ec.place()<<": "<<ec.message()<<std::endl;
+        std::cout<<"Udp socket error:"<<ec<<std::endl;
     });
 
     auto client = UdpClient::create("ClientEndpoint");
@@ -72,7 +72,7 @@ int udp_test() {
         std::cout<<"on connect "<<client->write("Hello!", 6)<<std::endl;
     });
     client->on_error([](const error_c& ec) {
-        std::cout<<"Udp socket error:"<<ec.place()<<": "<<ec.message()<<std::endl;
+        std::cout<<"Udp socket error:"<<ec<<std::endl;
     });
 
     loop.run();

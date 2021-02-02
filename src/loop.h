@@ -6,8 +6,10 @@
 #include <string>
 #include <utility>
 #include <chrono>
+#include <avahi-common/watch.h>
 #include "err.h"
 #include "measure.h"
+#include "avahi-cpp.h"
 
 using OnReadFunc  = std::function<void(void*, int)>;
 using OnEventFunc = std::function<void()>;
@@ -49,10 +51,10 @@ public:
     std::string name;
 };
 
-class IOLoop {
+class IOLoop : public AvahiHandler {
 public:
     IOLoop(int size=8);
-    ~IOLoop();
+    ~IOLoop() override;
     // poll
     auto execute(IOPollable* obj) -> error_c;
     auto add(int fd, uint32_t events, IOPollable* obj) -> errno_c;
@@ -68,6 +70,9 @@ public:
     void clear_stat_outputs();
     void register_report(Stat* source, std::chrono::nanoseconds period);
     void unregister_report(Stat* source);
+    // zeroconf
+    auto query_service(CAvahiService pattern, AvahiLookupFlags flags) -> std::unique_ptr<AvahiQuery> override;
+    auto get_register_group() -> std::unique_ptr<AvahiGroup> override;
     // run
     auto run() -> int;
     void stop();

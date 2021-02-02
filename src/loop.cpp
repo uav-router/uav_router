@@ -264,7 +264,7 @@ public:
             _sink->flush();
         });
         _timer.on_error([](const error_c& ec) {
-            std::cout<<"metrics timer error:"<<ec.place()<<": "<<ec.message()<<std::endl;
+            std::cout<<"metrics timer error:"<<ec<<std::endl;
         });
     };
     void setup(std::chrono::nanoseconds period, IOLoop* loop) {
@@ -276,7 +276,7 @@ public:
         _timer.init_periodic(_period);
         error_c ec = _timer.start_with(_loop);
         if (ec) { 
-            log::error()<<"Error starting metrics timer"<<ec.place()<<": "<<ec.message()<<std::endl;
+            log::error()<<"Error starting metrics timer: "<<ec<<std::endl;
             return;
         }
         _is_started = true;
@@ -317,21 +317,123 @@ public:
     std::map<std::string,DurationCollector> time_measure;
 };
 
+
+class AvahiWatch : public IOPollable {
+public:
+    AvahiWatch(IOLoop* loop, int fd, AvahiWatchEvent event, AvahiWatchCallback callback, void *userdata)
+        :IOPollable("AvahiWatch"), _loop(loop), _fd(fd),
+         _callback(callback),_userdata(userdata) {
+        _loop->add(_fd,avahi2epoll_flags(event),this);
+    }
+
+    auto epollEvent(int event) -> bool override {
+        _event = epoll2avahi_flags(event);
+        _callback(this,_fd,_event,_userdata);
+        return true;
+    }
+
+    static auto avahi2epoll_flags(AvahiWatchEvent flags) -> int {
+        int ret = 0;
+        if (flags & AVAHI_WATCH_IN)
+            ret |= EPOLLIN;
+        if (flags & AVAHI_WATCH_OUT)
+            ret |= EPOLLOUT;
+        if (flags & AVAHI_WATCH_ERR)
+            ret |= EPOLLERR;
+        if (flags & AVAHI_WATCH_HUP)
+            ret |= EPOLLHUP | EPOLLRDHUP;
+        return ret;
+    }
+
+    static auto epoll2avahi_flags(int flags) -> AvahiWatchEvent {
+        int ret = 0;
+        if (flags & EPOLLIN)
+            ret |= AVAHI_WATCH_IN;
+        if (flags & EPOLLOUT)
+            ret |= AVAHI_WATCH_OUT;
+        if (flags & EPOLLERR)
+            ret |= AVAHI_WATCH_ERR;
+        if (flags & EPOLLHUP | EPOLLRDHUP)
+            ret |= AVAHI_WATCH_HUP;
+        return (AvahiWatchEvent)ret;
+    }
+
+    static auto watch_new(const AvahiPoll *api, int fd, AvahiWatchEvent event, AvahiWatchCallback callback, void *userdata) -> AvahiWatch* {
+        auto loop = (IOLoop*)api->userdata;
+        return new AvahiWatch(loop,fd,event,callback,userdata);
+    }
+
+    /** Update the events to wait for. It is safe to call this function from an AvahiWatchCallback */
+    static void watch_update(AvahiWatch *w, AvahiWatchEvent event) {
+        w->_loop->mod(w->_fd,avahi2epoll_flags(event), w);
+    }
+
+    /** Return the events that happened. It is safe to call this function from an AvahiWatchCallback  */
+    static auto watch_get_events(AvahiWatch *w) -> AvahiWatchEvent {
+        return w->_event;
+    }
+
+    /** Free a watch. It is safe to call this function from an AvahiWatchCallback */
+    static void watch_free(AvahiWatch *w) {
+        w->_loop->del(w->_fd, w);
+        delete w;
+    }
+
+    IOLoop* _loop;
+    int _fd;
+    AvahiWatchEvent _event;
+    AvahiWatchCallback _callback;
+    void *_userdata;
+};
+
+auto timeout_new(const AvahiPoll *api, const struct timeval *tv, AvahiTimeoutCallback callback, void *userdata) -> AvahiTimeout* {
+    auto loop = (IOLoop*)api->userdata;
+    std::chrono::microseconds tmo(uint64_t(tv->tv_sec)*1000000+tv->tv_usec);
+    auto timer = new Timer();
+    timer->init_oneshoot(tmo);
+    timer->on_shoot_func([timer,callback, userdata](){ callback((AvahiTimeout *)timer,userdata);
+    });
+    timer->start_with(loop);
+    return (AvahiTimeout*) timer;
+}
+
+void timeout_update(AvahiTimeout * t, const struct timeval *tv) {
+    auto timer = (Timer*)t;
+    timer->stop();
+    std::chrono::microseconds tmo(uint64_t(tv->tv_sec)*1000000+tv->tv_usec);
+    timer->init_oneshoot(tmo);
+    timer->start_with(nullptr);
+}
+
+void timeout_free(AvahiTimeout *t) {
+    auto timer = (Timer*)t;
+    timer->stop();
+    delete timer;
+}
+
 class IOLoop::IOLoopImpl {
 public:
     IOLoopImpl(int size=8):_size(size) {
         errno_c ret = _epoll.create();
         if (ret) {
             ret.add_place("IOLoop");
-            log::error()<<ret.place()<<": "<<ret.message()<<std::endl;
+            log::error()<<ret<<std::endl;
             throw std::system_error(ret, ret.place());
         }
         auto on_err = [this](error_c& ec){on_error(ec);};
         stop_signal.on_error(on_err);
         udev.on_error(on_err);
+        avahi_poll.watch_new = AvahiWatch::watch_new;
+        avahi_poll.watch_update = AvahiWatch::watch_update;
+        avahi_poll.watch_get_events = AvahiWatch::watch_get_events;
+        avahi_poll.watch_free = AvahiWatch::watch_free;
+        avahi_poll.timeout_new = timeout_new;
+        avahi_poll.timeout_update = timeout_update;
+        avahi_poll.timeout_free = timeout_free;
+        avahi = AvahiHandler::create(&avahi_poll);
     }
     void on_error(error_c& ec) {
-        log::error()<<"io loop->"<<ec.place()<<": "<<ec.message()<<std::endl;
+        log::error()<<"io loop->"<<ec<<std::endl;
     }
     Epoll _epoll;
     Signal stop_signal;
@@ -344,6 +446,8 @@ public:
     OStatSet ostats;
     std::map<std::chrono::nanoseconds, PeriodicStatCall> statcalls;
     LoopStat stat;
+    AvahiPoll avahi_poll;
+    std::unique_ptr<AvahiHandler> avahi;
 };
 
 IOLoop::IOLoop(int size):_impl{new IOLoopImpl{size}} {}
@@ -513,3 +617,11 @@ void IOLoop::unregister_report(Stat* source) {
         statcall.second.remove(source);
     }
 }
+
+auto IOLoop::query_service(CAvahiService pattern, AvahiLookupFlags flags) -> std::unique_ptr<AvahiQuery>{
+    return _impl->avahi->query_service(pattern,flags);
+}
+auto IOLoop::get_register_group() -> std::unique_ptr<AvahiGroup> {
+    return _impl->avahi->get_register_group();
+}
+

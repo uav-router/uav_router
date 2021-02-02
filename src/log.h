@@ -14,10 +14,10 @@ namespace log {
     extern void init();
     extern void set_level(Level level);
 
-    extern std::ostream& debug();
-    extern std::ostream& info();
-    extern std::ostream& notice();
-    extern std::ostream& warning();
-    extern std::ostream& error();
+    extern auto debug() -> std::ostream&;
+    extern auto info() -> std::ostream&;
+    extern auto notice() -> std::ostream&;
+    extern auto warning() -> std::ostream&;
+    extern auto error() -> std::ostream&;
 };
 #endif //__LOG_H__

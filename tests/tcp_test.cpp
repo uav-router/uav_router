@@ -27,7 +27,7 @@ int tcp_client_test() {
     auto tcp = TcpClient::create("MyEndpoint");
     tcp->init("192.168.0.25",10000,&loop);
     tcp->on_error([&tcp](const error_c& ec) {
-        std::cout<<"Tcp socket error:"<<ec.place()<<": "<<ec.message()<<std::endl;
+        std::cout<<"Tcp socket error:"<<ec<<std::endl;
     });
     tcp->on_read([](void* buf, int len) {
         std::cout.write((char*)buf,len);
@@ -55,7 +55,7 @@ int tcp_test() {
         client = TcpClient::create("ClientEndpoint");
         client->init("192.168.0.25",10000,&loop);
         client->on_error([](const error_c& ec) {
-            std::cout<<"Tcp client socket error:"<<ec.place()<<": "<<ec.message()<<std::endl;
+            std::cout<<"Tcp client socket error:"<<ec<<std::endl;
         });
         client->on_read([](void* buf, int len) {
             std::cout<<"Tcp client: ";
@@ -108,7 +108,7 @@ int tcp_test() {
                 std::cout<<"Tcp socket closed end "<<sockets.size()<<std::endl;
             });
             (*sock)->on_error([](const error_c& ec) {
-                std::cout<<"Tcp server socket error:"<<ec.place()<<": "<<ec.message()<<std::endl;
+                std::cout<<"Tcp server socket error:"<<ec<<std::endl;
             });
         } else {
             std::cout<<"Error: socket can not inserted to set"<<std::endl;
@@ -118,7 +118,7 @@ int tcp_test() {
         std::cout<<"Server closed"<<std::endl;
     });
     server->on_error([](const error_c& ec) {
-        std::cout<<"Tcp server error:"<<ec.place()<<": "<<ec.message()<<std::endl;
+        std::cout<<"Tcp server error:"<<ec<<std::endl;
     });
 
     //loop.add_stat_output(influx_udp("192.168.0.111", 8090, &loop));
@@ -148,7 +148,7 @@ int tcp_server_test() {
                 std::cout<<"Tcp socket closed end "<<sockets.size()<<std::endl;
             });
             (*sock)->on_error([](const error_c& ec) {
-                std::cout<<"Tcp socket error:"<<ec.place()<<": "<<ec.message()<<std::endl;
+                std::cout<<"Tcp socket error:"<<ec<<std::endl;
             });
         } else {
             std::cout<<"Error: socket can not inserted to set"<<std::endl;

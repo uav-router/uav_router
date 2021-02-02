@@ -1,5 +1,6 @@
 #include <unistd.h>
 #include <iostream>
+#include <avahi-core/log.h>
 #include "log.h"
 
 namespace log {
@@ -15,10 +16,6 @@ namespace log {
 
     void set_level(Level level) {
         max_level = level;
-    }
-
-    void init() {
-        use_color = isatty(STDERR_FILENO);
     }
 
     auto log(Level level) -> std::ostream& {
@@ -42,6 +39,24 @@ namespace log {
             }
         }
         return std::cerr;
+    }
+
+    void avahiLogFunction(AvahiLogLevel level, const char *txt) {
+        Level l=Level::DEBUG;
+        switch(level) {
+        case AVAHI_LOG_ERROR : l = Level::ERROR; break;
+        case AVAHI_LOG_WARN  : l = Level::WARNING; break;
+        case AVAHI_LOG_NOTICE: l = Level::NOTICE; break;
+        case AVAHI_LOG_INFO  : l = Level::INFO; break;
+        case AVAHI_LOG_DEBUG : l = Level::DEBUG; break;
+        case AVAHI_LOG_LEVEL_MAX: break;
+        }
+        log(l)<<txt<<std::endl;
+    }
+
+    void init() {
+        use_color = isatty(STDERR_FILENO);
+        avahi_set_log_function(avahiLogFunction);
     }
 
     auto debug() -> std::ostream&   { return log(Level::DEBUG);  }

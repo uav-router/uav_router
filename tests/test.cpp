@@ -192,7 +192,7 @@ int uart_test() {
         std::cout<<std::endl;
     });
     uart->on_error([](const error_c& ec) {
-        std::cout<<"UART error:"<<ec.place()<<": "<<ec.message()<<std::endl;
+        std::cout<<"UART error:"<<ec<<std::endl;
     });
     loop.run();
     return 0;
@@ -205,6 +205,6 @@ int main() {
     //getifaddr_test();
     //return timer_test();
     //return test_if_address();
-    return uart_test();
-    //return getifaddr_test();
+    //return uart_test();
+    return getifaddr_test();
 }

@@ -153,7 +153,7 @@ public:
             ret = err_chk(ioctl(_fd, TIOCSSERIAL, &serial_ctl),"set serial "+_path);
         }
         if (ret) {
-            log::warning()<<"Low latency "<<ret.place()<<" : "<<ret.message()<<std::endl;
+            log::warning()<<"Low latency "<<ret<<std::endl;
             log::info()<<"Open UART "<<_path<<std::endl;
         } else {
             log::info()<<"Open UART with low latency "<<_path<<std::endl;

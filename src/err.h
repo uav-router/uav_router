@@ -5,6 +5,7 @@
 #include <netdb.h>
 #include <functional>
 #include <utility>
+#include <iostream>
 
 class error_c : public std::error_code {
 public:
@@ -18,6 +19,8 @@ public:
   private:
     std::string _place;
 };
+
+auto operator<<(std::ostream& out, const error_c& ec ) -> std::ostream&;
 
 class errno_c : public error_c {
 public:
@@ -42,6 +45,14 @@ public:
 inline void eai_check(const eai_code& ret, const std::string& from) {
     if (ret) throw std::system_error(ret, from);
 }
+
+auto avahi_category() -> const std::error_category &;
+
+class avahi_code : public error_c {
+public:
+    avahi_code(int val=0, const std::string& place="");
+};
+
 
 class error_handler {
 public:
