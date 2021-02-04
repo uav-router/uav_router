@@ -1,6 +1,8 @@
 #! /usr/bin/env python
 # encoding: utf-8
 
+import os
+
 VERSION='0.0.1'
 APPNAME='ioloop_test'
 
@@ -18,28 +20,18 @@ def configure(conf):
     conf.env.CPPFLAGS = ['-g','-std=c++17']
 def build(bld):
     sources = bld.path.find_node('src').ant_glob('*.cpp')
-    tests_dir = bld.path.find_node('tests')
-    bld.program(
-        source= [ tests_dir.find_node('test.cpp') ] + sources,
-        target='test',
-        includes     = ['src'],
-        lib          = ['anl','udev','avahi-common','avahi-client','avahi-core']
+    tests = bld.path.find_node('tests').ant_glob('*.cpp')
+    bld.objects(
+        source = sources,
+        target = 'common_objs'
     )
-    bld.program(
-        source= [ tests_dir.find_node('tcp_test.cpp') ] + sources,
-        target='tcptest',
-        includes     = ['src'],
-        lib          = ['anl','udev','avahi-common','avahi-client','avahi-core']
-    )
-    bld.program(
-        source= [ tests_dir.find_node('udp_test.cpp') ] + sources,
-        target='udptest',
-        includes     = ['src'],
-        lib          = ['anl','udev','avahi-common','avahi-client','avahi-core']
-    )
-    bld.program(
-        source= [ tests_dir.find_node('avahi-test.cpp') ] + sources,
-        target='avahitest',
-        includes     = ['src'],
-        lib          = ['anl','udev','avahi-common','avahi-client','avahi-core']
-    )
+    for test in tests:
+        bld.program(
+            source       = [test],
+            use          = 'common_objs',
+            target       = os.path.splitext(test.name)[0],
+            includes     = ['src'],
+            lib          = ['anl','udev','avahi-common','avahi-client','avahi-core']
+            
+        )
+    

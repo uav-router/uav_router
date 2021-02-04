@@ -7,30 +7,42 @@
 class Timer::TimerImpl {
 public:
     TimerImpl() = default;
-    void init_periodic(std::chrono::nanoseconds timeout) {
-        _ts.it_value.tv_sec  = _ts.it_interval.tv_sec  = timeout.count() / 1000000000;
-        _ts.it_value.tv_nsec = _ts.it_interval.tv_nsec = timeout.count() % 1000000000;
-        _clockid = CLOCK_MONOTONIC;
-        _flags = 0;
-    }
-    void init_oneshoot(std::chrono::nanoseconds timeout) {
-        _ts.it_value.tv_sec  = timeout.count() / 1000000000;
-        _ts.it_value.tv_nsec = timeout.count() % 1000000000;
-        _ts.it_interval.tv_sec  = 0;
-        _ts.it_interval.tv_nsec = 0;
-        _clockid = CLOCK_MONOTONIC;
-        _flags = 0;
-    }
-    void init(int clockid, const itimerspec * value, int flags) {
+    void init(int clockid) {
         _clockid = clockid;
-        _flags = flags;
-        _ts = *value;
+    }
+
+    auto arm_periodic(std::chrono::nanoseconds timeout) -> error_c {
+        itimerspec ts;
+        ts.it_value.tv_sec  = ts.it_interval.tv_sec  = timeout.count() / 1000000000;
+        ts.it_value.tv_nsec = ts.it_interval.tv_nsec = timeout.count() % 1000000000;
+        return arm(&ts,0,false);
+    }
+    auto  arm_oneshoot(std::chrono::nanoseconds timeout, bool autoclean) -> error_c {
+        itimerspec ts;
+        ts.it_value.tv_sec  = timeout.count() / 1000000000;
+        ts.it_value.tv_nsec = timeout.count() % 1000000000;
+        ts.it_interval.tv_sec  = 0;
+        ts.it_interval.tv_nsec = 0;        
+        return arm(&ts,0,autoclean);
+    }
+    auto arm(const itimerspec * value, int flags, bool autoclean) -> error_c {
+        auto ret = err_chk(timerfd_settime(_fd, flags, value, nullptr));
+        if (ret) {
+            ret.add_place("timerfd_settime");
+        }
+        if (!ret) {
+            _rearm = true;
+            _periodic = value->it_interval.tv_sec || value->it_interval.tv_nsec;
+            if (!_periodic) _autoclean = autoclean;
+        }
+        return ret;
     }
 
     int _fd = -1;
-    itimerspec _ts;
-    int _clockid;
-    int _flags;
+    int _clockid = CLOCK_MONOTONIC;
+    bool _rearm = false;
+    bool _periodic = false;
+    bool _autoclean = true;
     uint64_t _result=0;
     OnEventFunc _on_shoot;
     IOLoop* _loop=nullptr;
@@ -40,15 +52,19 @@ public:
 Timer::Timer():IOPollable("timer"),_impl{new TimerImpl{}} {}
 Timer::~Timer() = default;
 
-void Timer::init_periodic(std::chrono::nanoseconds timeout) {
-    _impl->init_periodic(timeout);
+auto Timer::arm_periodic(std::chrono::nanoseconds timeout) -> error_c {
+    return _impl->arm_periodic(timeout);
 }
-void Timer::init_oneshoot(std::chrono::nanoseconds timeout) {
-    _impl->init_oneshoot(timeout);
+auto Timer::arm_oneshoot(std::chrono::nanoseconds timeout, bool autoclean) -> error_c {
+    return _impl->arm_oneshoot(timeout, autoclean);
 }
-void Timer::init(int clockid, const itimerspec * value, int flags) {
-    _impl->init(clockid, value, flags);
+void Timer::init(int clockid) {
+    _impl->init(clockid);
 }
+auto Timer::arm(const itimerspec * value, int flags, bool autoclean) -> error_c {
+    return _impl->arm(value, flags, autoclean);
+}
+
 void Timer::on_shoot_func(OnEventFunc func) {
     _impl->_on_shoot = func;
 }
@@ -59,14 +75,20 @@ auto Timer::epollIN() -> int {
         errno_c err;
         on_error(err,"Wrong timerfd read");
     } else {
+        _impl->_rearm = false;
         if (_impl->_on_shoot) _impl->_on_shoot();
-        if (!(_impl->_ts.it_interval.tv_sec || _impl->_ts.it_interval.tv_nsec )) {
+        if (_impl->_autoclean && !(_impl->_periodic || _impl->_rearm)) {
             _impl->_loop->del(_impl->_fd, this);
             cleanup();
         }
     }
     return HANDLED;
 }
+
+void Timer::set_loop(IOLoop* loop) {
+    if (loop) _impl->_loop = loop;
+}
+
 auto Timer::start_with(IOLoop* loop) -> error_c {
     if (loop==nullptr && _impl->_loop==nullptr) return errno_c(EINVAL,"no loop specified");
 
@@ -74,21 +96,26 @@ auto Timer::start_with(IOLoop* loop) -> error_c {
     if (_impl->_fd==-1) {
         return errno_c("timerfd_create");
     }
-    errno_c ret = err_chk(timerfd_settime(_impl->_fd, _impl->_flags, &_impl->_ts, nullptr));
+    if (loop) _impl->_loop = loop;
+    errno_c ret = _impl->_loop->add(_impl->_fd, EPOLLIN, this);
     if (ret) {
         close(_impl->_fd);
-        ret.add_place("timerfd_settime");
-        return ret;
+        ret.add_place("loop add");
+        _impl->_fd = -1;
     }
-    if (loop) _impl->_loop = loop;
-    return _impl->_loop->add(_impl->_fd, EPOLLIN, this);
+    return ret;
+    
 }
 
 void Timer::stop() {
-    _impl->_loop->del(_impl->_fd, this);
-    cleanup();
+    if (_impl->_fd!=-1) {
+        _impl->_loop->del(_impl->_fd, this);
+        cleanup();
+    }
 }
 
 void Timer::cleanup() {
-    close(_impl->_fd);
+    if (_impl->_fd!=-1) {
+        close(_impl->_fd);
+    }
 }

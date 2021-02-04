@@ -69,9 +69,9 @@ void addr_info_result(addrinfo* addr, const std::error_code& res) {
 
 int timer_test() {
     Timer request;
-    request.init_periodic(2s);
     IOLoop loop;
     loop.execute(&request);
+    request.arm_periodic(2s);
     request.on_shoot_func([] () {std::cout<<"Timer event"<<std::endl;});
     loop.run();
     return 0;

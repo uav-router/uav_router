@@ -3,6 +3,7 @@
 #include <log.h>
 #include <err.h>
 #include <loop.h>
+#include <timer.h>
 
 void print_addr(const struct sockaddr *sa, socklen_t salen) {
     char host[NI_MAXHOST];
@@ -18,10 +19,11 @@ void print_addr(const struct sockaddr *sa, socklen_t salen) {
 
 void avahi_browser() {
     IOLoop loop;
+
     CAvahiService pattern;
     pattern.type = "_ipp._tcp";
-    pattern.protocol = AVAHI_PROTO_INET;
-    pattern.interface = if_nametoindex("tap0");
+    //pattern.protocol = AVAHI_PROTO_INET;
+    //pattern.interface = if_nametoindex("tap0");
     auto sb = loop.query_service(pattern,(AvahiLookupFlags)0);
     sb->on_failure([](error_c ec){
         std::cout<<"Query service error: "<<ec<<std::endl;
@@ -55,8 +57,9 @@ void avahi_browser() {
         std::cout<<"\tour_own: "<<!!(flags & AVAHI_LOOKUP_RESULT_OUR_OWN);
         std::cout<<"\twide_area: "<<!!(flags & AVAHI_LOOKUP_RESULT_WIDE_AREA);
         std::cout<<"\tmulticast: "<<!!(flags & AVAHI_LOOKUP_RESULT_MULTICAST);
-        std::cout<<"\tcached: "<<!!(flags & AVAHI_LOOKUP_RESULT_CACHED);
+        std::cout<<"\tcached: "<<!!(flags & AVAHI_LOOKUP_RESULT_CACHED)<<std::endl;
     });
+    loop.run();
 }
 
 int main() {

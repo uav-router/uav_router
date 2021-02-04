@@ -415,9 +415,10 @@ public:
     void on_addrinfo(addrinfo* ai, std::error_code& ec) {
         error_c err(ec.value(),ec.category());
         if (on_error(err,"addrinfo")) {
-            _timer.init_oneshoot(5s);
             error_c ret = _loop->execute(&_timer);
-            if (on_error(ret,"restart timer")) return;
+            if (on_error(ret,"execute timer")) return;
+            ret = _timer.arm_oneshoot(5s);
+            if (on_error(ret,"arm timer")) return;
             _timer.on_shoot_func([this]() { start_address_resolving(); });
             return;
         }

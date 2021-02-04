@@ -4,6 +4,7 @@
 #include <avahi-common/error.h>
 #include <avahi-common/malloc.h>
 #include "avahi-cpp.h"
+#include "log.h"
 
 class CAvahiClient {
 public:
@@ -64,6 +65,7 @@ public:
     CAvahiServiceBrowser(CAvahiClient* c):_client(c){};
     ~CAvahiServiceBrowser() {
         if (_sb) {
+            log::debug()<<"avahi_service_browser_free"<<std::endl;
             avahi_service_browser_free(_sb);
         }
     }
@@ -72,6 +74,9 @@ public:
         _sb = avahi_service_browser_new(
             _client->get(), item.interface, item.protocol, 
             item.type, item.domain, flags, callback, this );
+        log::debug()<<"avahi_service_browser_new interface="<<item.interface<<" protocol="<<item.protocol<<" type="<<item.type;
+        if (item.domain) log::debug()<<" domain="<<item.domain;
+        log::debug()<<" flags="<<flags<<" sb="<<_sb<<std::endl;
     }
     void on_resolve(OnResolve func) { _on_resolve = func; }
     void on_remove(OnRemove func) {_on_remove = func;}
@@ -99,6 +104,7 @@ private:
                          const char *domain,     AvahiLookupResultFlags flags,
                          void *userdata) {
         auto* _this = (CAvahiServiceBrowser*)userdata;
+        log::debug()<<"avahi_service_browser_callback "<<event<<std::endl;
         switch(event) {
             case AVAHI_BROWSER_NEW: {
                 if (!(avahi_service_resolver_new(_this->client(), interface, protocol, name, type, domain, 
@@ -134,6 +140,7 @@ private:
                             AvahiLookupResultFlags flags,
                             void *userdata ) {
         auto* _this = (CAvahiServiceBrowser*)userdata;
+        log::debug()<<"avahi_service_browser_resolve_callback "<<std::endl;
         if (event==AVAHI_RESOLVER_FAILURE) { 
             if (_this->_on_failure) 
                 _this->_on_failure(
@@ -205,7 +212,6 @@ public:
     void on_client_failure(error_c ec) { _sb.on_failure(ec); }
     //void on_client_state_changed(AvahiClientState state) {
     //}
-    OnResolve _on_resolve;
     CAvahiServiceBrowser _sb;    
 };
 
@@ -324,6 +330,7 @@ class AvahiHandlerImpl : public AvahiHandler {
 public:
     auto init(const AvahiPoll* poll, AvahiClientFlags flags = (AvahiClientFlags)0) -> error_c {
         _client.on_failure([this](CAvahiClient* client) {
+            log::debug()<<"AvahiClient on failure"<<std::endl;
             auto c = client->error("avahi client");
             for (auto query : AvahiQueryImpl::queries) {
                 query->on_client_failure(c);
@@ -333,6 +340,7 @@ public:
             }
         });
         _client.on_state_changed([this](CAvahiClient* client, AvahiClientState state) {
+            log::debug()<<"AvahiClient on state changed "<<state<<std::endl;
             for (auto group : AvahiGroupImpl::queries) {
                 switch (state) {
                 case AVAHI_CLIENT_S_RUNNING: group->client_create(); break;

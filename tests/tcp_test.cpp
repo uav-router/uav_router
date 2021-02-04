@@ -84,8 +84,8 @@ int tcp_test() {
             std::cout<<"socket disconnected"<<std::endl;
         });
     });
-    timer.init_periodic(3s);
     timer.start_with(&loop);
+    timer.arm_periodic(3s);
 
     
     std::unordered_set<std::unique_ptr<TcpSocket>> sockets;

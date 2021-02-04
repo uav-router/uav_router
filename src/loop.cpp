@@ -273,10 +273,14 @@ public:
     }
     void start() {
         if (_is_started) return;
-        _timer.init_periodic(_period);
         error_c ec = _timer.start_with(_loop);
         if (ec) { 
             log::error()<<"Error starting metrics timer: "<<ec<<std::endl;
+            return;
+        }
+        ec = _timer.arm_periodic(_period);
+        if (ec) { 
+            log::error()<<"Error arming metrics timer: "<<ec<<std::endl;
             return;
         }
         _is_started = true;
@@ -328,6 +332,7 @@ public:
 
     auto epollEvent(int event) -> bool override {
         _event = epoll2avahi_flags(event);
+        log::debug()<<"AvahiLoop watch callback "<<_fd<<" "<<counter++<<std::endl;
         _callback(this,_fd,_event,_userdata);
         return true;
     }
@@ -360,21 +365,25 @@ public:
 
     static auto watch_new(const AvahiPoll *api, int fd, AvahiWatchEvent event, AvahiWatchCallback callback, void *userdata) -> AvahiWatch* {
         auto loop = (IOLoop*)api->userdata;
+        log::debug()<<"AvahiLoop watch new "<<fd<<" event "<<event<<std::endl;
         return new AvahiWatch(loop,fd,event,callback,userdata);
     }
 
     /** Update the events to wait for. It is safe to call this function from an AvahiWatchCallback */
     static void watch_update(AvahiWatch *w, AvahiWatchEvent event) {
+        log::debug()<<"AvahiLoop watch update "<<w->_fd<<std::endl;
         w->_loop->mod(w->_fd,avahi2epoll_flags(event), w);
     }
 
     /** Return the events that happened. It is safe to call this function from an AvahiWatchCallback  */
     static auto watch_get_events(AvahiWatch *w) -> AvahiWatchEvent {
+        log::debug()<<"AvahiLoop watch get_events "<<w->_fd<<std::endl;
         return w->_event;
     }
 
     /** Free a watch. It is safe to call this function from an AvahiWatchCallback */
     static void watch_free(AvahiWatch *w) {
+        log::debug()<<"AvahiLoop watch free "<<w->_fd<<std::endl;
         w->_loop->del(w->_fd, w);
         delete w;
     }
@@ -383,30 +392,44 @@ public:
     int _fd;
     AvahiWatchEvent _event;
     AvahiWatchCallback _callback;
+    int counter = 0;
     void *_userdata;
 };
 
 auto timeout_new(const AvahiPoll *api, const struct timeval *tv, AvahiTimeoutCallback callback, void *userdata) -> AvahiTimeout* {
-    auto loop = (IOLoop*)api->userdata;
-    std::chrono::microseconds tmo(uint64_t(tv->tv_sec)*1000000+tv->tv_usec);
+    auto* loop = (IOLoop*)api->userdata;
     auto timer = new Timer();
-    timer->init_oneshoot(tmo);
-    timer->on_shoot_func([timer,callback, userdata](){ callback((AvahiTimeout *)timer,userdata);
+    timer->on_shoot_func([timer,callback, userdata](){ 
+        log::debug()<<"AvahiLoop timeout callback "<<userdata<<std::endl;
+        callback((AvahiTimeout *)timer,userdata);
     });
+    log::debug()<<"AvahiLoop timeout new "<<userdata<<" "<<timer<<std::endl;
     timer->start_with(loop);
+    if (tv) {
+        std::chrono::microseconds tmo(uint64_t(tv->tv_sec)*1000000+tv->tv_usec);
+        log::debug()<<"timeout "<<tv->tv_sec<<" "<<tv->tv_usec<<" "<<tmo.count()<<std::endl;
+        if (tmo.count()==0) { timer->arm_oneshoot(1ns,false);
+        } else { timer->arm_oneshoot(tmo,false);
+        }   
+    }
     return (AvahiTimeout*) timer;
 }
 
 void timeout_update(AvahiTimeout * t, const struct timeval *tv) {
     auto timer = (Timer*)t;
-    timer->stop();
-    std::chrono::microseconds tmo(uint64_t(tv->tv_sec)*1000000+tv->tv_usec);
-    timer->init_oneshoot(tmo);
-    timer->start_with(nullptr);
+    log::debug()<<"AvahiLoop timeout update "<<timer<<std::endl;
+    if (tv) {
+        std::chrono::microseconds tmo(uint64_t(tv->tv_sec)*1000000+tv->tv_usec);
+        log::debug()<<"timeout "<<tv->tv_sec<<" "<<tv->tv_usec<<" "<<tmo.count()<<std::endl;
+        if (tmo.count()==0) { timer->arm_oneshoot(1ns,false);
+        } else { timer->arm_oneshoot(tmo,false);
+        }
+    }
 }
 
 void timeout_free(AvahiTimeout *t) {
     auto timer = (Timer*)t;
+    log::debug()<<"AvahiLoop timeout free "<<timer<<std::endl;
     timer->stop();
     delete timer;
 }
@@ -430,7 +453,12 @@ public:
         avahi_poll.timeout_new = timeout_new;
         avahi_poll.timeout_update = timeout_update;
         avahi_poll.timeout_free = timeout_free;
-        avahi = AvahiHandler::create(&avahi_poll);
+    }
+    void create_avahi_handler(IOLoop* loop) {
+        if (!avahi) {
+            avahi_poll.userdata = loop;
+            avahi = AvahiHandler::create(&avahi_poll);
+        }
     }
     void on_error(error_c& ec) {
         log::error()<<"io loop->"<<ec<<std::endl;
@@ -541,45 +569,45 @@ auto IOLoop::run() -> int {
         for (int i = 0; i < r; i++) {
             auto* obj = static_cast<IOPollable *>(events[i].data.ptr);
             auto evs = events[i].events;
-            log::debug()<<obj->name<<" event "<<evs<<" obj "<<obj<<std::endl;
+            //log::debug()<<obj->name<<" event "<<evs<<" obj "<<obj<<std::endl;
             if (obj->epollEvent(evs)) continue;
             if (evs & EPOLLIN) {
-                log::debug()<<"EPOLLIN"<<std::endl;
+                //log::debug()<<"EPOLLIN"<<std::endl;
                 int ret = obj->epollIN();
                 auto s = _impl->stat.time_measure["in"].measure();
                 if (ret==IOPollable::NOT_HANDLED) log::warning()<<obj->name<<" EPOLLIN not handled"<<std::endl;
                 if (ret==IOPollable::STOP) continue;
             }
             if (evs & EPOLLOUT) {
-                log::debug()<<"EPOLLOUT"<<std::endl;
+                //log::debug()<<"EPOLLOUT"<<std::endl;
                 auto s = _impl->stat.time_measure["out"].measure();
                 int ret = obj->epollOUT();
                 if (ret==IOPollable::NOT_HANDLED) log::warning()<<obj->name<<" EPOLLOUT not handled"<<std::endl;
                 if (ret==IOPollable::STOP) continue;
             }
             if (evs & EPOLLPRI) {
-                log::debug()<<"EPOLLPRI"<<std::endl;
+                //log::debug()<<"EPOLLPRI"<<std::endl;
                 auto s = _impl->stat.time_measure["pri"].measure();
                 int ret = obj->epollPRI();
                 if (ret==IOPollable::NOT_HANDLED) log::warning()<<obj->name<<" EPOLLPRI not handled"<<std::endl;
                 if (ret==IOPollable::STOP) continue;
             }
             if (evs & EPOLLERR) {
-                log::debug()<<"EPOLLERR"<<std::endl;
+                //log::debug()<<"EPOLLERR"<<std::endl;
                 auto s = _impl->stat.time_measure["err"].measure();
                 int ret = obj->epollERR();
                 if (ret==IOPollable::NOT_HANDLED) log::warning()<<obj->name<<" EPOLLERR not handled"<<std::endl;
                 if (ret==IOPollable::STOP) continue;
             }
             if (evs & EPOLLHUP) {
-                log::debug()<<"EPOLLHUP"<<std::endl;
+                //log::debug()<<"EPOLLHUP"<<std::endl;
                 auto s = _impl->stat.time_measure["hup"].measure();
                 int ret = obj->epollHUP();
                 if (ret==IOPollable::NOT_HANDLED) log::warning()<<obj->name<<" EPOLLHUP not handled"<<std::endl;
                 if (ret==IOPollable::STOP) continue;
             }
             if (evs & EPOLLRDHUP) {
-                log::debug()<<"EPOLLRDHUP"<<std::endl;
+                //log::debug()<<"EPOLLRDHUP"<<std::endl;
                 auto s = _impl->stat.time_measure["rdhup"].measure();
                 int ret = obj->epollRDHUP();
                 if (ret==IOPollable::NOT_HANDLED) log::warning()<<obj->name<<" EPOLLRDHUP not handled"<<std::endl;
@@ -619,9 +647,11 @@ void IOLoop::unregister_report(Stat* source) {
 }
 
 auto IOLoop::query_service(CAvahiService pattern, AvahiLookupFlags flags) -> std::unique_ptr<AvahiQuery>{
+    _impl->create_avahi_handler(this);
     return _impl->avahi->query_service(pattern,flags);
 }
 auto IOLoop::get_register_group() -> std::unique_ptr<AvahiGroup> {
+    _impl->create_avahi_handler(this);
     return _impl->avahi->get_register_group();
 }
 
