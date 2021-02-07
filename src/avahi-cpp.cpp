@@ -34,6 +34,7 @@ public:
             _client = nullptr;
         }
     }
+    auto host_name() -> std::string { return _host_name; }
 private:
     static void callback(AvahiClient *s, AvahiClientState state, void* userdata) {
         auto* _this = (CAvahiClient*)userdata;
@@ -42,6 +43,10 @@ private:
             if (_this->_on_failure) { _this->_on_failure(_this);
             }
             return;
+        } else if (state==AVAHI_CLIENT_S_RUNNING) {
+            _this->_host_name = avahi_client_get_host_name_fqdn(s);
+            //log::debug()<<"Host: "<<avahi_client_get_host_name(s)<<" fqdn: "<<_this->_host_name;
+            //log::debug()<<" domain: "<<avahi_client_get_domain_name(s)<<std::endl;
         }
         if (_this->_on_state) { _this->_on_state(_this, state);
         }    
@@ -50,6 +55,7 @@ private:
     OnStateChanged _on_state;
     OnFailure _on_failure;
     AvahiClient* _client = nullptr;
+    std::string _host_name;
 };
 
 class CAvahiServiceBrowser {
@@ -73,9 +79,9 @@ public:
         _flags = flags;
         _sb = avahi_service_browser_new(
             _client->get(), item.interface, item.protocol, 
-            item.type, item.domain, flags, callback, this );
+            item.type.c_str(), item.domain.c_str(), flags, callback, this );
         log::debug()<<"avahi_service_browser_new interface="<<item.interface<<" protocol="<<item.protocol<<" type="<<item.type;
-        if (item.domain) log::debug()<<" domain="<<item.domain;
+        if (!item.domain.empty()) log::debug()<<" domain="<<item.domain;
         log::debug()<<" flags="<<flags<<" sb="<<_sb<<std::endl;
     }
     void on_resolve(OnResolve func) { _on_resolve = func; }
@@ -271,7 +277,7 @@ public:
                     uint16_t port,
                     std::string subtype = "",
                     std::initializer_list<std::pair<std::string,std::string>> txt = {},
-                    const char *host = nullptr,
+                    std::string host = std::string(),
                     AvahiPublishFlags flags = (AvahiPublishFlags) 0
                     ) -> error_c override {
         if (!_group) return avahi_code(-1,"add service without group");
@@ -286,13 +292,17 @@ public:
                 a = avahi_string_list_add(a, trec.c_str());
             }
         }
-        int ret = avahi_entry_group_add_service_strlst(_group,item.interface,item.protocol,flags,item.name,item.type,item.domain,host,port,a);
+        int ret = avahi_entry_group_add_service_strlst(_group,item.interface,item.protocol,flags,item.name.c_str(),item.type.c_str(),item.domain.c_str(),host.c_str(),port,a);
         if (ret!=AVAHI_OK) return avahi_code(ret,"avahi_entry_group_add_service");
         if (!subtype.empty()) {
-            ret = avahi_entry_group_add_service_subtype(_group,item.interface,item.protocol,flags,item.name,item.type,item.domain,subtype.c_str());         
+            ret = avahi_entry_group_add_service_subtype(_group,item.interface,item.protocol,flags,item.name.c_str(),item.type.c_str(),item.domain.c_str(),subtype.c_str());
             if (ret!=AVAHI_OK) return avahi_code(ret,"avahi_entry_group_add_service_subtype");
         }
         return error_c();
+    }
+
+    auto host_name() -> std::string  override {
+        return _client->host_name();
     }
     
     static void callback(AvahiEntryGroup *g, AvahiEntryGroupState state, void *userdata) {
@@ -342,6 +352,7 @@ public:
         _client.on_state_changed([this](CAvahiClient* client, AvahiClientState state) {
             log::debug()<<"AvahiClient on state changed "<<state<<std::endl;
             for (auto group : AvahiGroupImpl::queries) {
+                log::debug()<<"Group call"<<std::endl;
                 switch (state) {
                 case AVAHI_CLIENT_S_RUNNING: group->client_create(); break;
                 case AVAHI_CLIENT_S_COLLISION:

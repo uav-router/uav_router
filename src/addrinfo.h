@@ -16,12 +16,13 @@ public:
   SockAddr(addrinfo *ai);
   SockAddr(in_addr_t address, uint16_t port);
   SockAddr(const std::string& address, uint16_t port);
+  SockAddr(int fd);
   ~SockAddr();
 
   void init(sockaddr *addr, socklen_t len);
   void init(addrinfo *ai);
   void init(in_addr_t address, uint16_t port);
-  
+  void init(int fd);
   auto sock_addr() -> struct sockaddr *;
   auto len() -> socklen_t;
   auto size() -> socklen_t&;

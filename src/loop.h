@@ -71,7 +71,7 @@ public:
     void register_report(Stat* source, std::chrono::nanoseconds period);
     void unregister_report(Stat* source);
     // zeroconf
-    auto query_service(CAvahiService pattern, AvahiLookupFlags flags) -> std::unique_ptr<AvahiQuery> override;
+    auto query_service(CAvahiService pattern, AvahiLookupFlags flags=(AvahiLookupFlags)0) -> std::unique_ptr<AvahiQuery> override;
     auto get_register_group() -> std::unique_ptr<AvahiGroup> override;
     // run
     auto run() -> int;

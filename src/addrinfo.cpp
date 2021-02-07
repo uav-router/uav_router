@@ -35,6 +35,12 @@ public:
     void init(addrinfo* ai) {
         init(ai->ai_addr,ai->ai_addrlen);
     }
+    void init(int fd) {
+        length=sizeof(addr);
+        int ret = getsockname(fd,(sockaddr*)&addr.storage, &length);
+        if (ret) { length = 0;
+        }
+    }
 
     union {
         sockaddr_storage storage;
@@ -56,6 +62,9 @@ SockAddr::SockAddr(in_addr_t address, uint16_t port):_impl{new SockAddrImpl{}} {
     _impl->addr.in.sin_port = htons(port);
     _impl->length = sizeof(sockaddr_in);
 }
+SockAddr::SockAddr(int fd):_impl{new SockAddrImpl{}} {
+    _impl->init(fd);
+}
 SockAddr::SockAddr(const SockAddr& addr) {
     if (!addr._impl) return;
     _impl = std::make_unique<SockAddrImpl>((struct sockaddr*)&(addr._impl->addr.storage),addr._impl->length);
@@ -68,6 +77,12 @@ void SockAddr::init(addrinfo *ai) {
     if (!_impl) _impl = std::make_unique<SockAddrImpl>();
     _impl->init(ai);
 }
+
+void SockAddr::init(int fd) {
+    if (!_impl) _impl = std::make_unique<SockAddrImpl>();
+    _impl->init(fd);
+}
+
 
 void SockAddr::init(in_addr_t address, uint16_t port) {
     if (!_impl) _impl = std::make_unique<SockAddrImpl>();
@@ -126,8 +141,8 @@ auto SockAddr::ip4_addr_t() -> in_addr_t {
 
 auto SockAddr::port() -> uint16_t {
     if (!_impl) return 0;
-    if (_impl->addr.storage.ss_family==AF_INET) return _impl->addr.in.sin_port;
-    if (_impl->addr.storage.ss_family==AF_INET6) return _impl->addr.in6.sin6_port;
+    if (_impl->addr.storage.ss_family==AF_INET) return ntohs(_impl->addr.in.sin_port);
+    if (_impl->addr.storage.ss_family==AF_INET6) return ntohs(_impl->addr.in6.sin6_port);
     return 0;
 }
 

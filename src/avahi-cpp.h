@@ -1,25 +1,46 @@
 #ifndef __AVAHI_CPP_H__
 #define __AVAHI_CPP_H__
-#include <avahi-client/client.h>
-#include <avahi-client/lookup.h>
-#include <avahi-client/publish.h>
+#include <net/if.h>
 #include <functional>
 #include <string>
 #include <vector>
+#include <array>
 #include <memory>
+#include <avahi-client/client.h>
+#include <avahi-client/lookup.h>
+#include <avahi-client/publish.h>
+#include <avahi-common/address.h>
 #include "err.h"
 
 struct CAvahiService {
     AvahiIfIndex interface=AVAHI_IF_UNSPEC;
     AvahiProtocol protocol=AVAHI_PROTO_UNSPEC;
-    const char *name=nullptr;
-    const char *type=nullptr;
-    const char *domain=nullptr;
+    std::string name;
+    std::string type;
+    std::string domain;
     CAvahiService() = default;
-    CAvahiService(AvahiIfIndex i, AvahiProtocol p, const char *d) : 
-        interface(i), protocol(p), domain(d) {}
-    CAvahiService(const char *n, const char *t, const char *d = nullptr, AvahiIfIndex i = AVAHI_IF_UNSPEC, AvahiProtocol p = AVAHI_PROTO_UNSPEC) : 
-        interface(i), protocol(p), name(n), type(t), domain(d) {}
+    CAvahiService(std::string n, std::string t, std::string d = std::string(), AvahiIfIndex i = AVAHI_IF_UNSPEC, AvahiProtocol p = AVAHI_PROTO_UNSPEC) : 
+        interface(i), protocol(p), name(std::move(n)), type(std::move(t)), domain(std::move(d)) {}
+    auto set_type(std::string t) -> CAvahiService&& {
+        type = std::move(t);
+        return std::move(*this);
+    }
+    auto set_ipv4() -> CAvahiService&& {
+        protocol = AVAHI_PROTO_INET;
+        return std::move(*this);
+    }
+    auto set_ipv6() -> CAvahiService&& {
+        protocol = AVAHI_PROTO_INET6;
+        return std::move(*this);
+    }
+    auto set_interface(std::string if_name) -> CAvahiService&& {
+        auto if_ = if_nametoindex(if_name.c_str());
+        if (if_) interface = if_;
+        return std::move(*this);
+    }
+    auto get_interface() -> std::string {
+        return if_indextoname(interface,(char*)alloca(IF_NAMESIZE));
+    }
 };
 
 class AvahiQuery {
@@ -62,16 +83,16 @@ public:
                     uint16_t port,
                     std::string subtype = "",
                     std::initializer_list<std::pair<std::string,std::string>> txt = {},
-                    const char *host = nullptr,
+                    std::string host = std::string(),
                     AvahiPublishFlags flags = (AvahiPublishFlags) 0
                     ) -> error_c = 0;
-    
+    virtual auto host_name() -> std::string = 0;
 };
 
 class AvahiHandler {
 public:
     virtual ~AvahiHandler() = default;
-    virtual auto query_service(CAvahiService pattern, AvahiLookupFlags flags) -> std::unique_ptr<AvahiQuery> = 0;
+    virtual auto query_service(CAvahiService pattern, AvahiLookupFlags flags=(AvahiLookupFlags)0) -> std::unique_ptr<AvahiQuery> = 0;
     virtual auto get_register_group() -> std::unique_ptr<AvahiGroup> = 0;
     static auto create(const AvahiPoll* poll, AvahiClientFlags flags = (AvahiClientFlags)0) -> std::unique_ptr<AvahiHandler>;
 };

@@ -332,7 +332,7 @@ public:
 
     auto epollEvent(int event) -> bool override {
         _event = epoll2avahi_flags(event);
-        log::debug()<<"AvahiLoop watch callback "<<_fd<<" "<<counter++<<std::endl;
+        //log::debug()<<"AvahiLoop watch callback "<<_fd<<" "<<counter++<<std::endl;
         _callback(this,_fd,_event,_userdata);
         return true;
     }
@@ -365,25 +365,25 @@ public:
 
     static auto watch_new(const AvahiPoll *api, int fd, AvahiWatchEvent event, AvahiWatchCallback callback, void *userdata) -> AvahiWatch* {
         auto loop = (IOLoop*)api->userdata;
-        log::debug()<<"AvahiLoop watch new "<<fd<<" event "<<event<<std::endl;
+        //log::debug()<<"AvahiLoop watch new "<<fd<<" event "<<event<<std::endl;
         return new AvahiWatch(loop,fd,event,callback,userdata);
     }
 
     /** Update the events to wait for. It is safe to call this function from an AvahiWatchCallback */
     static void watch_update(AvahiWatch *w, AvahiWatchEvent event) {
-        log::debug()<<"AvahiLoop watch update "<<w->_fd<<std::endl;
+        //log::debug()<<"AvahiLoop watch update "<<w->_fd<<std::endl;
         w->_loop->mod(w->_fd,avahi2epoll_flags(event), w);
     }
 
     /** Return the events that happened. It is safe to call this function from an AvahiWatchCallback  */
     static auto watch_get_events(AvahiWatch *w) -> AvahiWatchEvent {
-        log::debug()<<"AvahiLoop watch get_events "<<w->_fd<<std::endl;
+        //log::debug()<<"AvahiLoop watch get_events "<<w->_fd<<std::endl;
         return w->_event;
     }
 
     /** Free a watch. It is safe to call this function from an AvahiWatchCallback */
     static void watch_free(AvahiWatch *w) {
-        log::debug()<<"AvahiLoop watch free "<<w->_fd<<std::endl;
+        //log::debug()<<"AvahiLoop watch free "<<w->_fd<<std::endl;
         w->_loop->del(w->_fd, w);
         delete w;
     }
@@ -400,14 +400,14 @@ auto timeout_new(const AvahiPoll *api, const struct timeval *tv, AvahiTimeoutCal
     auto* loop = (IOLoop*)api->userdata;
     auto timer = new Timer();
     timer->on_shoot_func([timer,callback, userdata](){ 
-        log::debug()<<"AvahiLoop timeout callback "<<userdata<<std::endl;
+        //log::debug()<<"AvahiLoop timeout callback "<<userdata<<std::endl;
         callback((AvahiTimeout *)timer,userdata);
     });
-    log::debug()<<"AvahiLoop timeout new "<<userdata<<" "<<timer<<std::endl;
+    //log::debug()<<"AvahiLoop timeout new "<<userdata<<" "<<timer<<std::endl;
     timer->start_with(loop);
     if (tv) {
         std::chrono::microseconds tmo(uint64_t(tv->tv_sec)*1000000+tv->tv_usec);
-        log::debug()<<"timeout "<<tv->tv_sec<<" "<<tv->tv_usec<<" "<<tmo.count()<<std::endl;
+        //log::debug()<<"timeout "<<tv->tv_sec<<" "<<tv->tv_usec<<" "<<tmo.count()<<std::endl;
         if (tmo.count()==0) { timer->arm_oneshoot(1ns,false);
         } else { timer->arm_oneshoot(tmo,false);
         }   
@@ -417,10 +417,10 @@ auto timeout_new(const AvahiPoll *api, const struct timeval *tv, AvahiTimeoutCal
 
 void timeout_update(AvahiTimeout * t, const struct timeval *tv) {
     auto timer = (Timer*)t;
-    log::debug()<<"AvahiLoop timeout update "<<timer<<std::endl;
+    //log::debug()<<"AvahiLoop timeout update "<<timer<<std::endl;
     if (tv) {
         std::chrono::microseconds tmo(uint64_t(tv->tv_sec)*1000000+tv->tv_usec);
-        log::debug()<<"timeout "<<tv->tv_sec<<" "<<tv->tv_usec<<" "<<tmo.count()<<std::endl;
+        //log::debug()<<"timeout "<<tv->tv_sec<<" "<<tv->tv_usec<<" "<<tmo.count()<<std::endl;
         if (tmo.count()==0) { timer->arm_oneshoot(1ns,false);
         } else { timer->arm_oneshoot(tmo,false);
         }
@@ -429,7 +429,7 @@ void timeout_update(AvahiTimeout * t, const struct timeval *tv) {
 
 void timeout_free(AvahiTimeout *t) {
     auto timer = (Timer*)t;
-    log::debug()<<"AvahiLoop timeout free "<<timer<<std::endl;
+    //log::debug()<<"AvahiLoop timeout free "<<timer<<std::endl;
     timer->stop();
     delete timer;
 }
