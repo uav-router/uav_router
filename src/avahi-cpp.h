@@ -11,6 +11,7 @@
 #include <avahi-client/publish.h>
 #include <avahi-common/address.h>
 #include "err.h"
+#include "sockaddr.h"
 
 struct CAvahiService {
     AvahiIfIndex interface=AVAHI_IF_UNSPEC;
@@ -34,8 +35,10 @@ struct CAvahiService {
         return std::move(*this);
     }
     auto set_interface(std::string if_name) -> CAvahiService&& {
-        auto if_ = if_nametoindex(if_name.c_str());
-        if (if_) interface = if_;
+        if (!if_name.empty()) {
+            auto if_ = if_nametoindex(if_name.c_str());
+            if (if_) interface = if_;
+        }
         return std::move(*this);
     }
     auto get_interface() -> std::string {
@@ -48,7 +51,7 @@ public:
     using OnResolve = std::function<void(
         CAvahiService service, 
         std::string host_name,
-        const sockaddr_storage& addr,
+        SockAddr addr,
         std::vector<std::pair<std::string,std::string>> txt,
         AvahiLookupResultFlags flags)>;
     using OnRemove = std::function<void(

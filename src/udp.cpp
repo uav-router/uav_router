@@ -219,7 +219,7 @@ public:
             }
             SockAddr any(INADDR_ANY, _addr.port());
             log::debug()<<"Bind server to "<<any<<std::endl;
-            ret = err_chk(bind(_fd, any.sock_addr(), any.len()), "udp server multicast bind");
+            ret = any.bind(_fd);
             if (ret) return ret;
             ip_mreq mreq;
             mreq.imr_multiaddr.s_addr = _addr.ip4_addr_t();
@@ -227,7 +227,7 @@ public:
             ret = err_chk(setsockopt(_fd, IPPROTO_IP, IP_ADD_MEMBERSHIP, &mreq, sizeof(mreq)),"add membership");
             if (ret) return ret;
         } else {
-            error_c ret = err_chk(bind(_fd, _addr.sock_addr(), _addr.len()), "udp server bind");
+            error_c ret = _addr.bind(_fd);
             if (ret) return ret;
         }
         error_c ret = loop->add(_fd, EPOLLIN | EPOLLOUT | EPOLLET, this);

@@ -53,6 +53,13 @@ public:
     avahi_code(int val=0, const std::string& place="");
 };
 
+class regex_code : public error_c {
+public:
+    regex_code(int val=0, const std::string& place="");
+};
+
+auto regex_category() -> const std::error_category &;
+
 
 class error_handler {
 public:

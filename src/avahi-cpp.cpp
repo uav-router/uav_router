@@ -1,6 +1,7 @@
 #include <forward_list>
 #include <cstring>
 #include <memory>
+#include <regex>
 #include <avahi-common/error.h>
 #include <avahi-common/malloc.h>
 #include "avahi-cpp.h"
@@ -68,7 +69,7 @@ public:
         CAvahiService item, 
         const char *host_name, const AvahiAddress *a, uint16_t port,
         AvahiStringList *txt, AvahiLookupResultFlags flags)>;*/
-    CAvahiServiceBrowser(CAvahiClient* c):_client(c){};
+    CAvahiServiceBrowser(CAvahiClient* c):_client(c),_service_pattern(".*"){};
     ~CAvahiServiceBrowser() {
         if (_sb) {
             log::debug()<<"avahi_service_browser_free"<<std::endl;
@@ -83,6 +84,12 @@ public:
         log::debug()<<"avahi_service_browser_new interface="<<item.interface<<" protocol="<<item.protocol<<" type="<<item.type;
         if (!item.domain.empty()) log::debug()<<" domain="<<item.domain;
         log::debug()<<" flags="<<flags<<" sb="<<_sb<<std::endl;
+        try {
+            if (!item.name.empty()) _service_pattern = item.name;
+        } catch (std::regex_error &e) {
+            log::error()<<regex_code(e.code())<<std::endl;
+            _service_pattern = ".*";
+        }
     }
     void on_resolve(OnResolve func) { _on_resolve = func; }
     void on_remove(OnRemove func) {_on_remove = func;}
@@ -119,7 +126,17 @@ private:
                 }
             } break;
             case AVAHI_BROWSER_REMOVE: {
-                if (_this->_on_remove) _this->_on_remove(CAvahiService{name,type,domain,interface,protocol},flags);
+                if (_this->_on_remove) {
+                    try {
+                        if (!std::regex_match(std::string(name),_this->_service_pattern)) {
+                            log::info()<<"Reporting of the nonmatched service "<<name<<" REMOVE skipped"<<std::endl;
+                            return;
+                        }
+                    } catch(std::regex_error& e) {
+                        log::error()<<"Reporting of the service "<<name<<" REMOVE skipped: "<<regex_code(e.code())<<std::endl;
+                    }
+                    _this->_on_remove(CAvahiService{name,type,domain,interface,protocol},flags);
+                }
             } break;
             case AVAHI_BROWSER_CACHE_EXHAUSTED: {
                 if (_this->_on_cache_exhausted) _this->_on_cache_exhausted();
@@ -155,19 +172,13 @@ private:
                 );
         } else if (event==AVAHI_RESOLVER_FOUND) {
             if (_this->_on_resolve) {
-                union {
-                  sockaddr_in      s4;
-                  sockaddr_in6     s6;
-                  sockaddr_storage ss;
-                } addr;
-                memset(&addr, 0, sizeof(addr));
-                addr.ss.ss_family = avahi_proto_to_af(a->proto);
-                if (addr.ss.ss_family == AF_INET) {
-                    addr.s4.sin_addr.s_addr = a->data.ipv4.address;
-                    addr.s4.sin_port = htons(port);
-                } else if (addr.ss.ss_family == AF_INET6) {
-                    memcpy(&addr.s6.sin6_addr.__in6_u.__u6_addr8, a->data.ipv6.address, sizeof(a->data.ipv6.address));
-                    addr.s6.sin6_port = htons(port);
+                try {
+                    if (!std::regex_match(std::string(name),_this->_service_pattern)) {
+                        log::info()<<"Reporting of the nonmatched service "<<name<<" ADD skipped"<<std::endl;
+                        return;
+                    }
+                } catch(std::regex_error& e) {
+                    log::error()<<"Reporting of the service "<<name<<" ADD skipped: "<<regex_code(e.code())<<std::endl;
                 }
                 std::vector<std::pair<std::string,std::string>> t;
                 for (AvahiStringList * _t = txt; _t != nullptr; _t = avahi_string_list_get_next(_t)) {
@@ -180,7 +191,7 @@ private:
                     }
                 }
                 _this->_on_resolve( CAvahiService{name, type, domain, interface, protocol}, 
-                    host_name, addr.ss, t, flags);
+                    host_name, SockAddr{a,port}, t, flags);
             } 
         } else {
             //TODO: unknown func
@@ -194,6 +205,7 @@ private:
     OnEvent _on_all_for_now;
     OnEvent _on_cache_exhausted;
     CAvahiClient* _client;
+    std::regex _service_pattern;
     AvahiServiceBrowser* _sb = nullptr;
     AvahiLookupFlags _flags = (AvahiLookupFlags)0;
 };

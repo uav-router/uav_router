@@ -18,6 +18,9 @@ public:
     void init(addrinfo* ai) {
         _addr.init(ai);
     }
+    void init(SockAddr&& a) {
+        _addr.init(std::move(a));
+    }
     void on_read(OnReadFunc func) {
         _on_read = func;
     }
@@ -79,11 +82,11 @@ public:
                 if (n<0) {
                     errno_c ret;
                     if (ret != std::error_condition(std::errc::resource_unavailable_try_again)) {
-                        on_error(ret, "udp recvfrom");
+                        on_error(ret, "tcp recv");
                     }
                 } else {
                     if (n != sz) {
-                        log::warning()<<"Datagram declared size "<<sz<<" is differ than read "<<n<<std::endl;
+                        log::warning()<<"Data declared size "<<sz<<" is differ than read "<<n<<std::endl;
                     }
                     log::debug()<<"on_read"<<std::endl;
                     if (_on_read) _on_read(buffer, n);
@@ -131,12 +134,12 @@ public:
             close(_fd);
             return ret;
         }*/
-        errno_c ret = err_chk(setsockopt(_fd,SOL_SOCKET,SO_KEEPALIVE,&yes,sizeof(yes)),"keepalive");
+        error_c ret = err_chk(setsockopt(_fd,SOL_SOCKET,SO_KEEPALIVE,&yes,sizeof(yes)),"keepalive");
         if (ret) {
             close(_fd);
             return ret;
         }
-        ret = err_chk(connect(_fd,_addr.sock_addr(), _addr.len()),"connect");
+        ret = _addr.connect(_fd);
         if (ret && ret!=std::error_condition(std::errc::operation_in_progress)) {
             close(_fd);
             return ret;
@@ -177,6 +180,22 @@ public:
         _addr_resolver->remote(host,port,loop);
     }
 
+    void init_service(const std::string& service_name, IOLoop* loop, const std::string& interface="") override {
+        _loop = loop;
+        _query = _loop->query_service(CAvahiService(service_name,"_pktstream._tcp").set_interface(interface).set_ipv4());
+        _query->on_failure([this](error_c ec){on_error(ec,_name);});
+        //_query->on_complete([](){});
+        _query->on_remove([this](CAvahiService service, AvahiLookupResultFlags flags){
+            _tcp.epollRDHUP();
+        });
+        _query->on_resolve([this](CAvahiService service, std::string host_name,
+                                SockAddr addr, std::vector<std::pair<std::string,std::string>> txt,
+                                AvahiLookupResultFlags flags){
+            _tcp.init(std::move(addr));
+            error_c ret = _loop->execute(&_tcp);
+            on_error(ret,_name);
+        });
+    }
     void on_read(OnReadFunc func) override {
         _tcp.on_read(func);
     }
@@ -197,6 +216,7 @@ public:
     IOLoop *_loop;
     TcpClientBase _tcp;
     std::unique_ptr<AddressResolver> _addr_resolver;
+    std::unique_ptr<AvahiQuery> _query;
 };
 
 auto TcpClient::create(const std::string& name) -> std::unique_ptr<TcpClient> {
@@ -315,9 +335,10 @@ private:
 class TcpServerBase : public IOPollable, public error_handler {
 public:
     TcpServerBase():IOPollable("tcp server") {}
-    void init(addrinfo* ai) {
-        _addr.init(ai);
+    void init(addrinfo* ai) { 
+        _addr.init(ai); 
     }
+        
     void on_connect(TcpServer::OnConnectFunc func) {
         _on_connect = func;
     }
@@ -390,7 +411,11 @@ public:
         return HANDLED;
     }
 
-    auto start_with(IOLoop* loop) -> error_c override {
+    auto socket_create() -> error_c {
+        if (_fd!=-1) {
+            _loop->del(_fd, this);
+            close(_fd);
+        }
         _fd = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0);
         if (_fd == -1) { return errno_c("tcp server socket");
         }
@@ -401,19 +426,69 @@ public:
             close(_fd);
             return ret;
         }*/
-        errno_c ret = err_chk(bind(_fd,_addr.sock_addr(), _addr.len()),"connect");
+        error_c ret = _addr.bind(_fd);
         if (ret) { // && ret!=std::error_condition(std::errc::operation_in_progress)) {
             close(_fd);
+            _fd = -1;
             return ret;
         }
-
         ret = err_chk(listen(_fd,5),"listen");
         if (ret) { // && ret!=std::error_condition(std::errc::operation_in_progress)) {
             close(_fd);
+            _fd = -1;
             return ret;
         }
+        return _loop->add(_fd, EPOLLIN, this);
+    }
+
+    void create_service(AvahiGroup* g) {
+        error_c ret = socket_create();
+        if (ret) {
+            log::error()<<ret<<std::endl;
+            return;
+        }
+        SockAddr port_finder(_fd);
+        error_c ec = g->add_service(
+            CAvahiService(_service_name,"_pktstream._tcp").set_ipv4().set_interface(_service_itf),
+            port_finder.port()
+        );
+        std::string name = std::to_string(port_finder.port())+"_"+_service_itf+"_"+g->host_name()+".tcp";
+        ec = g->add_service(
+            CAvahiService(name,"_portclaim._tcp").set_ipv4().set_interface(_service_itf),
+            port_finder.port()
+        );
+        if (ec) {
+            log::error()<<"Error adding service "<<_service_name<<": "<<ec<<std::endl;
+            ec = g->reset();
+            if (ec) log::error()<<"Error reset service "<<_service_name<<": "<<ec<<std::endl;
+        } else {
+            ec = g->commit();
+            if (ec) log::error()<<"Error commit service "<<_service_name<<": "<<ec<<std::endl;
+        }
+    }
+
+    auto start_with(IOLoop* loop) -> error_c override {
         _loop = loop;
-        return loop->add(_fd, EPOLLIN, this);
+        
+        if (_service_name.empty()) { return socket_create();
+        }
+        _group = _loop->get_register_group();
+        _group->on_create([this](AvahiGroup* g){ create_service(g); 
+        });
+        _group->on_collision([this](AvahiGroup* g){ 
+            log::info()<<"Group collision"<<std::endl;
+            g->reset();
+            create_service(g);
+        });
+        _group->on_established([this](AvahiGroup* g){ 
+            log::info()<<"Service registered"<<std::endl;
+            
+        });
+        _group->on_failure([](error_c ec){ 
+            log::info()<<"Group error"<<ec<<std::endl;
+        });
+        _group->create();
+        return error_c();
     }
 
     void on_connect(std::unique_ptr<TcpSocket>& socket, sockaddr* addr, socklen_t len) {
@@ -424,16 +499,25 @@ public:
         }
     }
 
+    void set_service_info(const std::string& name, const std::string& itf) {
+        _service_name = name;
+        _service_itf = itf;
+    }
+    void clear_service_info() {
+        _service_itf.clear();
+        _service_name.clear();
+    }
 private:
     SockAddr _addr;
-    //socklen_t _addrlen = 0;
-    //sockaddr_storage _addr;
+    std::string _service_name = "";
+    std::string _service_itf = "";
+    std::unique_ptr<AvahiGroup> _group;
     int _fd = -1;
     bool is_writeable = false;
     bool is_connected = false;
     OnEventFunc _on_close;
     TcpServer::OnConnectFunc _on_connect;
-    IOLoop* _loop;
+    IOLoop* _loop = nullptr;
 };
 
 class TcpServerImpl : public TcpServer {
@@ -449,13 +533,25 @@ public:
             }
         });
     };
+    
     void init(uint16_t port, IOLoop* loop, const std::string& host="") override {
         _loop = loop;
+        _tcp.clear_service_info();
         _addr_resolver->local(port,_loop,host);
     }
     void init_interface(const std::string& interface, uint16_t port, IOLoop* loop) override {
         _loop = loop;
+        _tcp.clear_service_info();
         _addr_resolver->local_interface(interface,port,_loop);
+    }
+    void init_service(const std::string& service_name, const std::string& interface, IOLoop* loop) override {
+        _loop = loop;
+        _tcp.set_service_info(service_name,interface);
+        if (interface.empty()) { 
+            _addr_resolver->local(0,_loop);
+            return;
+        }
+        _addr_resolver->local_interface(interface,0,_loop);
     }
     void on_connect(OnConnectFunc func) override {
         _tcp.on_connect(func);

@@ -8,6 +8,7 @@
 class TcpClient : public IOWriteable, public error_handler {
 public:
     virtual void init(const std::string& host, uint16_t port, IOLoop* loop) = 0;
+    virtual void init_service(const std::string& service_name, IOLoop* loop, const std::string& interface="") = 0;
     virtual void on_read(OnReadFunc func) = 0;
     virtual void on_connect(OnEventFunc func) = 0;
     virtual void on_close(OnEventFunc func) = 0;
@@ -26,6 +27,7 @@ public:
     using OnConnectFunc = std::function<void(std::unique_ptr<TcpSocket>&, sockaddr*, socklen_t)>;
     virtual void init(uint16_t port, IOLoop* loop, const std::string& host="") = 0;
     virtual void init_interface(const std::string& interface, uint16_t port, IOLoop* loop) = 0;
+    virtual void init_service(const std::string& service_name, const std::string& interface, IOLoop* loop) = 0;
     virtual void on_connect(OnConnectFunc func) = 0;
     virtual void on_close(OnEventFunc func) = 0;
     static auto create(const std::string& name) -> std::unique_ptr<TcpServer>;

@@ -53,7 +53,7 @@ error_c get_port_number(addrinfo* ai, uint16_t &port, int &fd) {
         errno_c ec("Error opening port allocating socket");
         return ec;
     }
-    errno_c ret;
+    error_c ret;
     int yes = 1;
     ret = err_chk(setsockopt(fd,SOL_SOCKET,SO_REUSEPORT,&yes,sizeof(yes)),"reuseport");
     if (ret) {
@@ -63,8 +63,8 @@ error_c get_port_number(addrinfo* ai, uint16_t &port, int &fd) {
     //SockAddr addr(INADDR_ANY,0);
     SockAddr addr(ai);
     std::cout<<"Bind addr "<<addr<<std::endl;
-    ret = err_chk(bind(fd,addr.sock_addr(), addr.len()),"bind to zero port");
-    if (ret) { // && ret!=std::error_condition(std::errc::operation_in_progress)) {
+    ret = addr.bind(fd);
+    if (ret) { 
         close(fd);
         return ret;
     }
@@ -137,11 +137,7 @@ void auto_port() {
 void avahi_browser() {
     IOLoop loop;
 
-    CAvahiService pattern;
-    pattern.type = "_ipp._tcp";
-    pattern.protocol = AVAHI_PROTO_INET;
-    pattern.interface = if_nametoindex("tap0");
-    auto sb = loop.query_service(CAvahiService().set_type("_ipp._tcp").set_ipv4().set_interface("tap0"));
+    auto sb = loop.query_service(CAvahiService("anon(.*)","_ipp._tcp").set_ipv4().set_interface("tap0"));
     sb->on_failure([](error_c ec){
         std::cout<<"Query service error: "<<ec<<std::endl;
     });
@@ -152,17 +148,11 @@ void avahi_browser() {
         std::cout<<"REMOVE: service "<< service.name<<" of type "<<service.type<<" in domain '"<<service.domain<<"'"<<std::endl;
     });
     sb->on_resolve([](CAvahiService service, std::string host_name,
-        const sockaddr_storage& addr, std::vector<std::pair<std::string,std::string>> txt,
+        SockAddr addr, std::vector<std::pair<std::string,std::string>> txt,
         AvahiLookupResultFlags flags){
         
         std::cout<<"ADD: service "<< service.name<<" of type "<<service.type<<" in domain '"<<service.domain<<"'"<<std::endl;    
-        if (addr.ss_family==AF_INET) {
-            print_addr((sockaddr*)&addr,sizeof(sockaddr_in));
-        } else if (addr.ss_family==AF_INET6) {
-            print_addr((sockaddr*)&addr,sizeof(sockaddr_in6));
-        } else {
-            std::cout<<"Unknown address family"<<std::endl;
-        }
+        std::cout<<addr<<std::endl;
         for (auto& rec : txt) {
             if (rec.second.empty()) {
                 std::cout<<rec.first<<std::endl;
@@ -183,8 +173,8 @@ void avahi_browser() {
 int main() {
     log::init();
     log::set_level(log::Level::DEBUG);
-    //avahi_browser();
+    avahi_browser();
     //avahi_register();
-    auto_port();
+    //auto_port();
     return 0;
 }
