@@ -184,7 +184,6 @@ public:
         _loop = loop;
         _query = _loop->query_service(CAvahiService(service_name,"_pktstream._tcp").set_interface(interface).set_ipv4());
         _query->on_failure([this](error_c ec){on_error(ec,_name);});
-        //_query->on_complete([](){});
         _query->on_remove([this](CAvahiService service, AvahiLookupResultFlags flags){
             _tcp.epollRDHUP();
         });

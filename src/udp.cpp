@@ -3,6 +3,7 @@
 #include <unistd.h>
 //#include <fcntl.h>
 #include <cstring>
+#include <string>
 #include <utility>
 #include <sys/epoll.h>
 #include <sys/ioctl.h>
@@ -56,6 +57,11 @@ public:
         _broadcast=broadcast;
         _multicast=false;
         _addr.init(ai);
+    }
+    void init(SockAddr&& a, bool broadcast=false) {
+        _broadcast=broadcast;
+        _multicast=false;
+        _addr.init(std::move(a));
     }
     void init_multicast(const SockAddr& addr, const SockAddr& itf, unsigned char ttl) {
         _addr = addr;
@@ -309,6 +315,53 @@ public:
         execute();
     }
 
+    void init_service(const std::string& service_name, IOLoop* loop, const std::string& interface="") override {
+        _loop = loop;
+        _query = _loop->query_service(CAvahiService(service_name,"_pktstream._udp").set_interface(interface).set_ipv4());
+        _query->on_failure([this](error_c ec){on_error(ec,_name);});
+        //_query->on_complete([](){});
+        _query->on_remove([this](CAvahiService service, AvahiLookupResultFlags flags){
+            _udp.epollRDHUP();
+        });
+        _query->on_resolve([this,interface](CAvahiService service, std::string host_name,
+                                SockAddr addr, std::vector<std::pair<std::string,std::string>> txt,
+                                AvahiLookupResultFlags flags){
+            std::string broadcast_address;
+            std::string multicast_address;
+            int ttl = 0;
+            for (auto& e : txt) {
+                if (e.first=="broadcast") {
+                    broadcast_address = e.second;
+                    break;
+                }
+                if (e.first=="multicast") {
+                    multicast_address = e.second;
+                    break;
+                }
+                if (e.first=="ttl") {
+                    ttl = std::stoi(e.second);
+                }
+            }
+            if (!broadcast_address.empty()) {
+                _udp.init(SockAddr(broadcast_address,addr.port()),true);
+            } else if (!multicast_address.empty()) {
+                // get interface address
+                SockAddr ifaddr;
+                _addr_resolver->on_resolve([this,&ifaddr](addrinfo* addr_info) {
+                    ifaddr.init(addr_info->ai_addr,addr_info->ai_addrlen);
+                });
+
+                error_c ret = _addr_resolver->resolve_interface_ip4(interface,addr.port(),AddressResolver::Interface::ADDRESS);
+                if (ret) { ifaddr.init(INADDR_ANY, addr.port());
+                }
+                _udp.init_multicast(SockAddr(multicast_address,addr.port()), ifaddr, ttl);
+            } else {
+                _udp.init(std::move(addr));
+            }
+            execute();
+        });
+    }
+
     void on_read(OnReadFunc func) override {
         _udp.on_read(func);
     }
@@ -326,6 +379,7 @@ public:
     IOLoop *_loop;
     UdpClientBase _udp;
     std::unique_ptr<AddressResolver> _addr_resolver;
+    std::unique_ptr<AvahiQuery> _query;
     bool _is_writeable = false;
     OnEventFunc _on_connect;
 };
@@ -388,6 +442,12 @@ public:
         _udp.init_multicast(maddr, addr, 0);
         error_c ec = _loop->execute(&_udp);
         _is_writeable = !on_error(ec,"udp server");
+    }
+    void init_service(const std::string& service_name, const std::string& interface, IOLoop* loop) override {
+    }
+    void init_broadcast_service(const std::string& service_name, const std::string& interface, IOLoop* loop) override {
+    }
+    void init_multicast_service(const std::string& service_name, const std::string& interface, IOLoop* loop) override {
     }
 
     void on_connect(OnConnectFunc func) override {
