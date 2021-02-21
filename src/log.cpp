@@ -18,6 +18,7 @@ namespace Log {
         if (max_level<level) return null_stream;
         if (use_color) {
             switch (level) {
+                case Level::DISABLE: break;
                 case Level::ERROR:
                     std::cerr<<"\033[31m"; //RED
                     break;

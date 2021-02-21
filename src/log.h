@@ -6,7 +6,8 @@
 
 namespace Log {
     enum class Level {
-        ERROR = 0,
+        DISABLE = 0,
+        ERROR, 
         WARNING,
         NOTICE,
         INFO,
@@ -34,7 +35,7 @@ namespace Log {
         auto warning() -> std::ostream& { return log(Level::WARNING);  }
         auto error() -> std::ostream& { return log(Level::ERROR);  }
     private:
-        Level max_level = Level::INFO;
+        Level max_level = Level::DISABLE;
         std::string _name;
     };
 };
