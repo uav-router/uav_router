@@ -7,6 +7,7 @@
 #include "avahi-cpp.h"
 #include "log.h"
 
+static Log::Log log("avahi");
 class CAvahiClient {
 public:
     using OnStateChanged = std::function<void(CAvahiClient* , AvahiClientState)>;
@@ -46,8 +47,8 @@ private:
             return;
         } else if (state==AVAHI_CLIENT_S_RUNNING) {
             _this->_host_name = avahi_client_get_host_name_fqdn(s);
-            //log::debug()<<"Host: "<<avahi_client_get_host_name(s)<<" fqdn: "<<_this->_host_name;
-            //log::debug()<<" domain: "<<avahi_client_get_domain_name(s)<<std::endl;
+            //log.debug()<<"Host: "<<avahi_client_get_host_name(s)<<" fqdn: "<<_this->_host_name;
+            //log.debug()<<" domain: "<<avahi_client_get_domain_name(s)<<std::endl;
         }
         if (_this->_on_state) { _this->_on_state(_this, state);
         }    
@@ -72,7 +73,7 @@ public:
     CAvahiServiceBrowser(CAvahiClient* c):_client(c),_service_pattern(".*"){};
     ~CAvahiServiceBrowser() {
         if (_sb) {
-            log::debug()<<"avahi_service_browser_free"<<std::endl;
+            log.debug()<<"avahi_service_browser_free"<<std::endl;
             avahi_service_browser_free(_sb);
         }
     }
@@ -81,13 +82,13 @@ public:
         _sb = avahi_service_browser_new(
             _client->get(), item.interface, item.protocol, 
             item.type.c_str(), item.domain.c_str(), flags, callback, this );
-        log::debug()<<"avahi_service_browser_new interface="<<item.interface<<" protocol="<<item.protocol<<" type="<<item.type;
-        if (!item.domain.empty()) log::debug()<<" domain="<<item.domain;
-        log::debug()<<" flags="<<flags<<" sb="<<_sb<<std::endl;
+        log.debug()<<"avahi_service_browser_new interface="<<item.interface<<" protocol="<<item.protocol<<" type="<<item.type;
+        if (!item.domain.empty()) log.debug()<<" domain="<<item.domain;
+        log.debug()<<" flags="<<flags<<" sb="<<_sb<<std::endl;
         try {
             if (!item.name.empty()) _service_pattern = item.name;
         } catch (std::regex_error &e) {
-            log::error()<<regex_code(e.code())<<std::endl;
+            log.error()<<regex_code(e.code())<<std::endl;
             _service_pattern = ".*";
         }
     }
@@ -117,7 +118,7 @@ private:
                          const char *domain,     AvahiLookupResultFlags flags,
                          void *userdata) {
         auto* _this = (CAvahiServiceBrowser*)userdata;
-        log::debug()<<"avahi_service_browser_callback "<<event<<std::endl;
+        log.debug()<<"avahi_service_browser_callback "<<event<<std::endl;
         switch(event) {
             case AVAHI_BROWSER_NEW: {
                 if (!(avahi_service_resolver_new(_this->client(), interface, protocol, name, type, domain, 
@@ -129,11 +130,11 @@ private:
                 if (_this->_on_remove) {
                     try {
                         if (!std::regex_match(std::string(name),_this->_service_pattern)) {
-                            log::info()<<"Reporting of the nonmatched service "<<name<<" REMOVE skipped"<<std::endl;
+                            log.info()<<"Reporting of the nonmatched service "<<name<<" REMOVE skipped"<<std::endl;
                             return;
                         }
                     } catch(std::regex_error& e) {
-                        log::error()<<"Reporting of the service "<<name<<" REMOVE skipped: "<<regex_code(e.code())<<std::endl;
+                        log.error()<<"Reporting of the service "<<name<<" REMOVE skipped: "<<regex_code(e.code())<<std::endl;
                     }
                     _this->_on_remove(CAvahiService{name,type,domain,interface,protocol},flags);
                 }
@@ -163,7 +164,7 @@ private:
                             AvahiLookupResultFlags flags,
                             void *userdata ) {
         auto* _this = (CAvahiServiceBrowser*)userdata;
-        log::debug()<<"avahi_service_browser_resolve_callback "<<std::endl;
+        log.debug()<<"avahi_service_browser_resolve_callback "<<std::endl;
         if (event==AVAHI_RESOLVER_FAILURE) { 
             if (_this->_on_failure) 
                 _this->_on_failure(
@@ -174,11 +175,11 @@ private:
             if (_this->_on_resolve) {
                 try {
                     if (!std::regex_match(std::string(name),_this->_service_pattern)) {
-                        log::info()<<"Reporting of the nonmatched service "<<name<<" ADD skipped"<<std::endl;
+                        log.info()<<"Reporting of the nonmatched service "<<name<<" ADD skipped"<<std::endl;
                         return;
                     }
                 } catch(std::regex_error& e) {
-                    log::error()<<"Reporting of the service "<<name<<" ADD skipped: "<<regex_code(e.code())<<std::endl;
+                    log.error()<<"Reporting of the service "<<name<<" ADD skipped: "<<regex_code(e.code())<<std::endl;
                 }
                 std::vector<std::pair<std::string,std::string>> t;
                 for (AvahiStringList * _t = txt; _t != nullptr; _t = avahi_string_list_get_next(_t)) {
@@ -352,7 +353,7 @@ class AvahiHandlerImpl : public AvahiHandler {
 public:
     auto init(const AvahiPoll* poll, AvahiClientFlags flags = (AvahiClientFlags)0) -> error_c {
         _client.on_failure([this](CAvahiClient* client) {
-            log::debug()<<"AvahiClient on failure"<<std::endl;
+            log.debug()<<"AvahiClient on failure"<<std::endl;
             auto c = client->error("avahi client");
             for (auto query : AvahiQueryImpl::queries) {
                 query->on_client_failure(c);
@@ -362,9 +363,9 @@ public:
             }
         });
         _client.on_state_changed([this](CAvahiClient* client, AvahiClientState state) {
-            log::debug()<<"AvahiClient on state changed "<<state<<std::endl;
+            log.debug()<<"AvahiClient on state changed "<<state<<std::endl;
             for (auto group : AvahiGroupImpl::queries) {
-                log::debug()<<"Group call"<<std::endl;
+                log.debug()<<"Group call"<<std::endl;
                 switch (state) {
                 case AVAHI_CLIENT_S_RUNNING: group->client_create(); break;
                 case AVAHI_CLIENT_S_COLLISION:

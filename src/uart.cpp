@@ -20,7 +20,7 @@ using namespace std::chrono_literals;
 #include "loop.h"
 #include "uart.h"
 #include "timer.h"
-
+static Log::Log log("uart");
 struct FD {
     int* _fd;
     FD(int& fd): _fd(&fd) {}
@@ -105,7 +105,7 @@ public:
                 _usb_id = _loop->udev_find_id(_path);
             }
             if (!_usb_id.empty()) {
-                log::debug()<<"USB port "<<_usb_id<<" detected"<<std::endl;
+                log.debug()<<"USB port "<<_usb_id<<" detected"<<std::endl;
                 _loop->udev_start_watch(this);
             }
         }
@@ -154,10 +154,10 @@ public:
             ret = err_chk(ioctl(_fd, TIOCSSERIAL, &serial_ctl),"set serial "+_path);
         }
         if (ret) {
-            log::warning()<<"Low latency "<<ret<<std::endl;
-            log::info()<<"Open UART "<<_path<<std::endl;
+            log.warning()<<"Low latency "<<ret<<std::endl;
+            log.info()<<"Open UART "<<_path<<std::endl;
         } else {
-            log::info()<<"Open UART with low latency "<<_path<<std::endl;
+            log.info()<<"Open UART with low latency "<<_path<<std::endl;
         }
         ret = err_chk(ioctl(_fd, TCFLSH, TCIOFLUSH),"flush "+_path);
         if (ret) return ret;
@@ -178,7 +178,7 @@ public:
                 break;
             }
             if (n==0) {
-                //log::warning()<<"UART read returns 0 bytes"<<std::endl;
+                //log.warning()<<"UART read returns 0 bytes"<<std::endl;
                 break;
             }
             if (_on_read) _on_read(buffer.data(), n);
@@ -193,7 +193,7 @@ public:
     }
 
     auto epollERR() -> int override {
-        log::debug()<<"EPOLLERR on uart "<<_path<<std::endl;
+        log.debug()<<"EPOLLERR on uart "<<_path<<std::endl;
         return HANDLED;
     }
 
@@ -243,13 +243,13 @@ public:
 
     void udev_add(const std::string& node, const std::string& id) override {
         if (id==_usb_id) { 
-            log::debug()<<"Device "<<_usb_id<<" added"<<std::endl;
+            log.debug()<<"Device "<<_usb_id<<" added"<<std::endl;
             init_uart_retry();
         }
     }
     void udev_remove(const std::string& node, const std::string& id) override {
         if (id==_usb_id) {
-            log::debug()<<"Device "<<_usb_id<<" removed"<<std::endl;
+            log.debug()<<"Device "<<_usb_id<<" removed"<<std::endl;
             if (_fd != -1) { 
                 _loop->del(_fd, this);
                 close(_fd);

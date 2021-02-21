@@ -17,7 +17,7 @@ using namespace std::chrono_literals;
 #include "err.h"
 #include "loop.h"
 #include "timer.h"
-
+static Log::Log log("loop");
 class Epoll {
 public:
     Epoll() = default;
@@ -78,7 +78,7 @@ public:
                 return HANDLED;
             } 
             if (s != sizeof(fdsi)) {
-                log::error()<<"IOLoop->_sig_fd Wrong read size "<<s<<std::endl;
+                log.error()<<"IOLoop->_sig_fd Wrong read size "<<s<<std::endl;
                 return HANDLED;
             }
             if (_on_signal) {
@@ -275,12 +275,12 @@ public:
         if (_is_started) return;
         error_c ec = _timer.start_with(_loop);
         if (ec) { 
-            log::error()<<"Error starting metrics timer: "<<ec<<std::endl;
+            log.error()<<"Error starting metrics timer: "<<ec<<std::endl;
             return;
         }
         ec = _timer.arm_periodic(_period);
         if (ec) { 
-            log::error()<<"Error arming metrics timer: "<<ec<<std::endl;
+            log.error()<<"Error arming metrics timer: "<<ec<<std::endl;
             return;
         }
         _is_started = true;
@@ -332,7 +332,7 @@ public:
 
     auto epollEvent(int event) -> bool override {
         _event = epoll2avahi_flags(event);
-        //log::debug()<<"AvahiLoop watch callback "<<_fd<<" "<<counter++<<std::endl;
+        //log.debug()<<"AvahiLoop watch callback "<<_fd<<" "<<counter++<<std::endl;
         _callback(this,_fd,_event,_userdata);
         return true;
     }
@@ -365,25 +365,25 @@ public:
 
     static auto watch_new(const AvahiPoll *api, int fd, AvahiWatchEvent event, AvahiWatchCallback callback, void *userdata) -> AvahiWatch* {
         auto loop = (IOLoop*)api->userdata;
-        //log::debug()<<"AvahiLoop watch new "<<fd<<" event "<<event<<std::endl;
+        //log.debug()<<"AvahiLoop watch new "<<fd<<" event "<<event<<std::endl;
         return new AvahiWatch(loop,fd,event,callback,userdata);
     }
 
     /** Update the events to wait for. It is safe to call this function from an AvahiWatchCallback */
     static void watch_update(AvahiWatch *w, AvahiWatchEvent event) {
-        //log::debug()<<"AvahiLoop watch update "<<w->_fd<<std::endl;
+        //log.debug()<<"AvahiLoop watch update "<<w->_fd<<std::endl;
         w->_loop->mod(w->_fd,avahi2epoll_flags(event), w);
     }
 
     /** Return the events that happened. It is safe to call this function from an AvahiWatchCallback  */
     static auto watch_get_events(AvahiWatch *w) -> AvahiWatchEvent {
-        //log::debug()<<"AvahiLoop watch get_events "<<w->_fd<<std::endl;
+        //log.debug()<<"AvahiLoop watch get_events "<<w->_fd<<std::endl;
         return w->_event;
     }
 
     /** Free a watch. It is safe to call this function from an AvahiWatchCallback */
     static void watch_free(AvahiWatch *w) {
-        //log::debug()<<"AvahiLoop watch free "<<w->_fd<<std::endl;
+        //log.debug()<<"AvahiLoop watch free "<<w->_fd<<std::endl;
         w->_loop->del(w->_fd, w);
         delete w;
     }
@@ -400,14 +400,14 @@ auto timeout_new(const AvahiPoll *api, const struct timeval *tv, AvahiTimeoutCal
     auto* loop = (IOLoop*)api->userdata;
     auto timer = new Timer();
     timer->on_shoot_func([timer,callback, userdata](){ 
-        //log::debug()<<"AvahiLoop timeout callback "<<userdata<<std::endl;
+        //log.debug()<<"AvahiLoop timeout callback "<<userdata<<std::endl;
         callback((AvahiTimeout *)timer,userdata);
     });
-    //log::debug()<<"AvahiLoop timeout new "<<userdata<<" "<<timer<<std::endl;
+    //log.debug()<<"AvahiLoop timeout new "<<userdata<<" "<<timer<<std::endl;
     timer->start_with(loop);
     if (tv) {
         std::chrono::microseconds tmo(uint64_t(tv->tv_sec)*1000000+tv->tv_usec);
-        //log::debug()<<"timeout "<<tv->tv_sec<<" "<<tv->tv_usec<<" "<<tmo.count()<<std::endl;
+        //log.debug()<<"timeout "<<tv->tv_sec<<" "<<tv->tv_usec<<" "<<tmo.count()<<std::endl;
         if (tmo.count()==0) { timer->arm_oneshoot(1ns,false);
         } else { timer->arm_oneshoot(tmo,false);
         }   
@@ -417,10 +417,10 @@ auto timeout_new(const AvahiPoll *api, const struct timeval *tv, AvahiTimeoutCal
 
 void timeout_update(AvahiTimeout * t, const struct timeval *tv) {
     auto timer = (Timer*)t;
-    //log::debug()<<"AvahiLoop timeout update "<<timer<<std::endl;
+    //log.debug()<<"AvahiLoop timeout update "<<timer<<std::endl;
     if (tv) {
         std::chrono::microseconds tmo(uint64_t(tv->tv_sec)*1000000+tv->tv_usec);
-        //log::debug()<<"timeout "<<tv->tv_sec<<" "<<tv->tv_usec<<" "<<tmo.count()<<std::endl;
+        //log.debug()<<"timeout "<<tv->tv_sec<<" "<<tv->tv_usec<<" "<<tmo.count()<<std::endl;
         if (tmo.count()==0) { timer->arm_oneshoot(1ns,false);
         } else { timer->arm_oneshoot(tmo,false);
         }
@@ -429,7 +429,7 @@ void timeout_update(AvahiTimeout * t, const struct timeval *tv) {
 
 void timeout_free(AvahiTimeout *t) {
     auto timer = (Timer*)t;
-    //log::debug()<<"AvahiLoop timeout free "<<timer<<std::endl;
+    //log.debug()<<"AvahiLoop timeout free "<<timer<<std::endl;
     timer->stop();
     delete timer;
 }
@@ -440,7 +440,7 @@ public:
         errno_c ret = _epoll.create();
         if (ret) {
             ret.add_place("IOLoop");
-            log::error()<<ret<<std::endl;
+            log.error()<<ret<<std::endl;
             throw std::system_error(ret, ret.place());
         }
         auto on_err = [this](error_c& ec){on_error(ec);};
@@ -461,7 +461,7 @@ public:
         }
     }
     void on_error(error_c& ec) {
-        log::error()<<"io loop->"<<ec<<std::endl;
+        log.error()<<"io loop->"<<ec<<std::endl;
     }
     Epoll _epoll;
     Signal stop_signal;
@@ -519,10 +519,10 @@ auto IOLoop::udev_find_path(const std::string& id) -> std::string {
 
 
 auto IOLoop::run() -> int {
-    log::debug()<<"run start"<<std::endl;
+    log.debug()<<"run start"<<std::endl;
     _impl->stop_signal.init({SIGINT,SIGTERM});
     _impl->stop_signal.on_signal([this](signalfd_siginfo* si) {
-        log::info()<<"Signal: "<<strsignal(si->ssi_signo)<<std::endl;
+        log.info()<<"Signal: "<<strsignal(si->ssi_signo)<<std::endl;
         for (auto w : _impl->watches) { w->cleanup();
         }
         _impl->_stop=true;
@@ -563,59 +563,59 @@ auto IOLoop::run() -> int {
             errno_c err;
             if (err == std::error_condition(std::errc::interrupted)) { continue;
             } else {
-                log::error()<<"IOLoop wait: "<<err.message()<<std::endl;
+                log.error()<<"IOLoop wait: "<<err.message()<<std::endl;
             }
         }
         for (int i = 0; i < r; i++) {
             auto* obj = static_cast<IOPollable *>(events[i].data.ptr);
             auto evs = events[i].events;
-            //log::debug()<<obj->name<<" event "<<evs<<" obj "<<obj<<std::endl;
+            //log.debug()<<obj->name<<" event "<<evs<<" obj "<<obj<<std::endl;
             if (obj->epollEvent(evs)) continue;
             if (evs & EPOLLIN) {
-                //log::debug()<<"EPOLLIN"<<std::endl;
+                //log.debug()<<"EPOLLIN"<<std::endl;
                 int ret = obj->epollIN();
                 auto s = _impl->stat.time_measure["in"].measure();
-                if (ret==IOPollable::NOT_HANDLED) log::warning()<<obj->name<<" EPOLLIN not handled"<<std::endl;
+                if (ret==IOPollable::NOT_HANDLED) log.warning()<<obj->name<<" EPOLLIN not handled"<<std::endl;
                 if (ret==IOPollable::STOP) continue;
             }
             if (evs & EPOLLOUT) {
-                //log::debug()<<"EPOLLOUT"<<std::endl;
+                //log.debug()<<"EPOLLOUT"<<std::endl;
                 auto s = _impl->stat.time_measure["out"].measure();
                 int ret = obj->epollOUT();
-                if (ret==IOPollable::NOT_HANDLED) log::warning()<<obj->name<<" EPOLLOUT not handled"<<std::endl;
+                if (ret==IOPollable::NOT_HANDLED) log.warning()<<obj->name<<" EPOLLOUT not handled"<<std::endl;
                 if (ret==IOPollable::STOP) continue;
             }
             if (evs & EPOLLPRI) {
-                //log::debug()<<"EPOLLPRI"<<std::endl;
+                //log.debug()<<"EPOLLPRI"<<std::endl;
                 auto s = _impl->stat.time_measure["pri"].measure();
                 int ret = obj->epollPRI();
-                if (ret==IOPollable::NOT_HANDLED) log::warning()<<obj->name<<" EPOLLPRI not handled"<<std::endl;
+                if (ret==IOPollable::NOT_HANDLED) log.warning()<<obj->name<<" EPOLLPRI not handled"<<std::endl;
                 if (ret==IOPollable::STOP) continue;
             }
             if (evs & EPOLLERR) {
-                //log::debug()<<"EPOLLERR"<<std::endl;
+                //log.debug()<<"EPOLLERR"<<std::endl;
                 auto s = _impl->stat.time_measure["err"].measure();
                 int ret = obj->epollERR();
-                if (ret==IOPollable::NOT_HANDLED) log::warning()<<obj->name<<" EPOLLERR not handled"<<std::endl;
+                if (ret==IOPollable::NOT_HANDLED) log.warning()<<obj->name<<" EPOLLERR not handled"<<std::endl;
                 if (ret==IOPollable::STOP) continue;
             }
             if (evs & EPOLLHUP) {
-                //log::debug()<<"EPOLLHUP"<<std::endl;
+                //log.debug()<<"EPOLLHUP"<<std::endl;
                 auto s = _impl->stat.time_measure["hup"].measure();
                 int ret = obj->epollHUP();
-                if (ret==IOPollable::NOT_HANDLED) log::warning()<<obj->name<<" EPOLLHUP not handled"<<std::endl;
+                if (ret==IOPollable::NOT_HANDLED) log.warning()<<obj->name<<" EPOLLHUP not handled"<<std::endl;
                 if (ret==IOPollable::STOP) continue;
             }
             if (evs & EPOLLRDHUP) {
-                //log::debug()<<"EPOLLRDHUP"<<std::endl;
+                //log.debug()<<"EPOLLRDHUP"<<std::endl;
                 auto s = _impl->stat.time_measure["rdhup"].measure();
                 int ret = obj->epollRDHUP();
-                if (ret==IOPollable::NOT_HANDLED) log::warning()<<obj->name<<" EPOLLRDHUP not handled"<<std::endl;
+                if (ret==IOPollable::NOT_HANDLED) log.warning()<<obj->name<<" EPOLLRDHUP not handled"<<std::endl;
                 if (ret==IOPollable::STOP) continue;
             }
         }
     }
-    log::debug()<<"run end"<<std::endl;
+    log.debug()<<"run end"<<std::endl;
     return 0;
 }
 

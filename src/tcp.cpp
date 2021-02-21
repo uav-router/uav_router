@@ -11,7 +11,7 @@
 #include "tcp.h"
 
 #include "addrinfo.h"
-
+static Log::Log log("tcp");
 class TcpClientBase : public IOPollable, public IOWriteable, public error_handler {
 public:
     TcpClientBase():IOPollable("tcp client") {}
@@ -41,7 +41,7 @@ public:
 
     auto write(const void* buf, int len) -> int override {
         if (!is_writeable) {
-            log::debug()<<"write not writable"<<std::endl;
+            log.debug()<<"write not writable"<<std::endl;
             return 0;
         }
         int ret = send(_fd, buf, len, MSG_NOSIGNAL);
@@ -50,7 +50,7 @@ public:
             on_error(err, "TCP send datagram");
             is_writeable=false;
         } else if (ret != len) {
-            log::error()<<"Partial send "<<ret<<" from "<<len<<" bytes"<<std::endl;
+            log.error()<<"Partial send "<<ret<<" from "<<len<<" bytes"<<std::endl;
         }
         return ret;
     }
@@ -74,7 +74,7 @@ public:
                 on_error(ret, "Query datagram size error");
             } else {
                 if (sz==0) {
-                    log::debug()<<"nothing to read"<<std::endl;
+                    log.debug()<<"nothing to read"<<std::endl;
                     break;
                 }
                 void* buffer = alloca(sz);
@@ -86,9 +86,9 @@ public:
                     }
                 } else {
                     if (n != sz) {
-                        log::warning()<<"Data declared size "<<sz<<" is differ than read "<<n<<std::endl;
+                        log.warning()<<"Data declared size "<<sz<<" is differ than read "<<n<<std::endl;
                     }
-                    log::debug()<<"on_read"<<std::endl;
+                    log.debug()<<"on_read"<<std::endl;
                     if (_on_read) _on_read(buffer, n);
                 }
             }
@@ -263,9 +263,9 @@ public:
                     }
                 } else {
                     if (n != sz) {
-                        log::warning()<<"Datagram declared size "<<sz<<" is differ than read "<<n<<std::endl;
+                        log.warning()<<"Datagram declared size "<<sz<<" is differ than read "<<n<<std::endl;
                     }
-                    log::debug()<<"on_read"<<std::endl;
+                    log.debug()<<"on_read"<<std::endl;
                     if (_on_read) _on_read(buffer, n);
                 }
             }
@@ -365,9 +365,9 @@ public:
         } else while(true) {
             sockaddr_storage client_addr;
             socklen_t ca_len = sizeof(client_addr);
-            //log::debug()<<"before accept"<<std::endl;
+            //log.debug()<<"before accept"<<std::endl;
             int client = accept(_fd, (sockaddr *) &client_addr, &ca_len);
-            //log::debug()<<"after accept "<<client<<std::endl;
+            //log.debug()<<"after accept "<<client<<std::endl;
             if (client==-1) {
                 errno_c ret("accept");
                 if (ret!=std::error_condition(std::errc::resource_unavailable_try_again) &&
@@ -443,7 +443,7 @@ public:
     void create_service(AvahiGroup* g) {
         error_c ret = socket_create();
         if (ret) {
-            log::error()<<ret<<std::endl;
+            log.error()<<ret<<std::endl;
             return;
         }
         SockAddr port_finder(_fd);
@@ -457,12 +457,12 @@ public:
             port_finder.port()
         );
         if (ec) {
-            log::error()<<"Error adding service "<<_service_name<<": "<<ec<<std::endl;
+            log.error()<<"Error adding service "<<_service_name<<": "<<ec<<std::endl;
             ec = g->reset();
-            if (ec) log::error()<<"Error reset service "<<_service_name<<": "<<ec<<std::endl;
+            if (ec) log.error()<<"Error reset service "<<_service_name<<": "<<ec<<std::endl;
         } else {
             ec = g->commit();
-            if (ec) log::error()<<"Error commit service "<<_service_name<<": "<<ec<<std::endl;
+            if (ec) log.error()<<"Error commit service "<<_service_name<<": "<<ec<<std::endl;
         }
     }
 
@@ -475,16 +475,16 @@ public:
         _group->on_create([this](AvahiGroup* g){ create_service(g); 
         });
         _group->on_collision([this](AvahiGroup* g){ 
-            log::info()<<"Group collision"<<std::endl;
+            log.info()<<"Group collision"<<std::endl;
             g->reset();
             create_service(g);
         });
         _group->on_established([this](AvahiGroup* g){ 
-            log::info()<<"Service registered"<<std::endl;
+            log.info()<<"Service registered"<<std::endl;
             
         });
         _group->on_failure([](error_c ec){ 
-            log::info()<<"Group error"<<ec<<std::endl;
+            log.info()<<"Group error"<<ec<<std::endl;
         });
         _group->create();
         return error_c();
@@ -494,7 +494,7 @@ public:
         if (_on_connect) {
             _on_connect(socket, addr, len);
         } else {
-            log::warning()<<"No socket handler"<<std::endl;
+            log.warning()<<"No socket handler"<<std::endl;
         }
     }
 

@@ -19,8 +19,8 @@ void test() {
 }
 
 int main() {
-    log::init();
-    log::set_level(log::Level::DEBUG);
+    Log::init();
+    Log::set_level(Log::Level::DEBUG);
     test();
     return 0;
 }

@@ -17,7 +17,7 @@
 
 #include "addrinfo.h"
 //#include "timer.h"
-
+static Log::Log log("udp");
 struct FD {
     int* _fd;
     FD(int& fd): _fd(&fd) {}
@@ -69,7 +69,7 @@ public:
         _ttl = ttl;
         _broadcast=false;
         _multicast=true;
-        log::debug()<<"Multicast addr:"<<_addr<<", itf:"<<_itf<<std::endl;
+        log.debug()<<"Multicast addr:"<<_addr<<", itf:"<<_itf<<std::endl;
     }
     void on_read(OnReadFunc func) {
         _on_read = func;
@@ -100,9 +100,9 @@ public:
                     }
                 } else {
                     if (n != sz) {
-                        log::warning()<<"Datagram declared size "<<sz<<" is differ than read "<<n<<std::endl;
+                        log.warning()<<"Datagram declared size "<<sz<<" is differ than read "<<n<<std::endl;
                     }
-                    log::debug()<<"on_read"<<std::endl;
+                    log.debug()<<"on_read"<<std::endl;
                     if (_server) {
                         auto stream = streams.find(addr);
                         if (stream==streams.end()) {
@@ -116,7 +116,7 @@ public:
                             }
                         }
                         if (stream==streams.end()) {
-                            log::error()<<"Insert stream in the map fails"<<std::endl;
+                            log.error()<<"Insert stream in the map fails"<<std::endl;
                         } else {
                             dynamic_cast<UdpStreamImpl*>(stream->second.get())->on_read(buffer, n);
                         }
@@ -148,7 +148,7 @@ protected:
             on_error(err, "UDP send datagram");
             is_writeable=false;
         } else if (ret != len) {
-            log::error()<<"Partial send "<<ret<<" from "<<len<<" bytes"<<std::endl;
+            log.error()<<"Partial send "<<ret<<" from "<<len<<" bytes"<<std::endl;
         }
         return ret;
     }
@@ -219,12 +219,12 @@ public:
             int yes = 1;
             error_c ret = err_chk(setsockopt(_fd, SOL_SOCKET, SO_REUSEPORT, &yes, sizeof(yes)),"reuse port");
             if (ret) {
-                log::warning()<<"Multicast settings: "<<ret<<std::endl;
+                log.warning()<<"Multicast settings: "<<ret<<std::endl;
                 ret = err_chk(setsockopt(_fd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes)),"multicast reuseaddr");
                 if (ret) return ret;
             }
             SockAddr any(INADDR_ANY, _addr.port());
-            log::debug()<<"Bind server to "<<any<<std::endl;
+            log.debug()<<"Bind server to "<<any<<std::endl;
             ret = any.bind(_fd);
             if (ret) return ret;
             ip_mreq mreq;
@@ -296,7 +296,7 @@ public:
 
     void init_multicast(const std::string& address, uint16_t port, IOLoop* loop, const std::string& interface, int ttl) override {
         _loop = loop;
-        log::debug()<<"client init multicast started "<<address<<":"<<port<<" i:"<<interface<<std::endl;
+        log.debug()<<"client init multicast started "<<address<<":"<<port<<" i:"<<interface<<std::endl;
         SockAddr maddr(address, port);
         if (maddr.len()==0) {
             errno_c ret(EINVAL);
@@ -424,7 +424,7 @@ public:
     }
     void init_multicast(const std::string& address, uint16_t port, IOLoop* loop, const std::string& interface="") override {
         _loop = loop;
-        log::debug()<<"server init multicast started "<<address<<":"<<port<<" i:"<<interface<<std::endl;
+        log.debug()<<"server init multicast started "<<address<<":"<<port<<" i:"<<interface<<std::endl;
         SockAddr maddr(address, port);
         if (maddr.len()==0) {
             errno_c ret(EINVAL);

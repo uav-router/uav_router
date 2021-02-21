@@ -28,28 +28,28 @@ void print_addr(const struct sockaddr *sa, socklen_t salen) {
     char port[NI_MAXSERV];
     eai_code ec = getnameinfo(sa, salen, host, sizeof(host), port, sizeof(port), NI_NUMERICHOST | NI_NUMERICSERV);
     if (ec) {
-       log::error()<<"Get nameinfo error: "<<ec.message()<<" family="<<sa->sa_family<<" len="<<salen<<std::endl;
+       Log::error()<<"Get nameinfo error: "<<ec.message()<<" family="<<sa->sa_family<<" len="<<salen<<std::endl;
     } else {
-        log::info()<<"address = "<<host<<":"<<port<<std::endl;
+        Log::info()<<"address = "<<host<<":"<<port<<std::endl;
     }
 }
 
 void addr_info_result(addrinfo* addr, const std::error_code& res) {
     if (res) {
-        log::error()<<"Get address error "<<": "<<res.message()<<std::endl;
+        Log::error()<<"Get address error "<<": "<<res.message()<<std::endl;
     } else {
         char host[NI_MAXHOST];
         char port[NI_MAXSERV];
         while(addr) {
             eai_code ec = getnameinfo(addr->ai_addr, addr->ai_addrlen, host, sizeof(host), port, sizeof(port), NI_NUMERICHOST | NI_NUMERICSERV);
             if (ec) {
-               log::error()<<"Get nameinfo error: "<<ec.message()<<std::endl;
+               Log::error()<<"Get nameinfo error: "<<ec.message()<<std::endl;
             } else {
-                log::info()<<"address = "<<host<<":"<<port
+                Log::info()<<"address = "<<host<<":"<<port
                 <<" family "<<addr->ai_family<<" socktype "<<addr->ai_socktype
                 <<" protocol "<<addr->ai_protocol<<" flags "<<addr->ai_flags;
-                if (addr->ai_canonname) log::info()<<" canonname "<<addr->ai_canonname;
-                log::info()<<std::endl;
+                if (addr->ai_canonname) Log::info()<<" canonname "<<addr->ai_canonname;
+                Log::info()<<std::endl;
             }
             addr = addr->ai_next;
         }
@@ -199,8 +199,8 @@ int uart_test() {
 }
 
 int main() {
-    log::init();
-    log::set_level(log::Level::DEBUG);
+    Log::init();
+    Log::set_level(Log::Level::DEBUG);
     //return addrinfo_test();
     //getifaddr_test();
     //return timer_test();

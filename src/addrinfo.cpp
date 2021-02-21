@@ -21,6 +21,7 @@ using namespace std::chrono_literals;
 #include "addrinfo.h"
 #include "timer.h"
 
+static Log::Log log("addrinfo");
 
 class AddrInfo final : public IOPollable, public error_handler {
 public:
@@ -114,7 +115,7 @@ auto AddrInfo::start_with(IOLoop* loop) -> error_c {
         close(_sfd);
         return ec;
     }
-    log::debug()<<"start_with ends"<<std::endl;
+    log.debug()<<"start_with ends"<<std::endl;
     return error_c();
 }
 
@@ -129,15 +130,15 @@ auto AddrInfo::epollIN() -> int {
             break;
         }
         if (s != sizeof(fdsi)) {
-            log::error()<<"AddrInfo->Wrong read size "<<s<<std::endl;
+            log.error()<<"AddrInfo->Wrong read size "<<s<<std::endl;
             continue;
         }
         if (fdsi.ssi_signo != SIGUSR1) {
-            log::error()<<"AddrInfo->Wrong signal no "<<fdsi.ssi_signo<<std::endl;
+            log.error()<<"AddrInfo->Wrong signal no "<<fdsi.ssi_signo<<std::endl;
             continue;
         }
         if (fdsi.ssi_code != SI_ASYNCNL) {
-            log::error()<<"AddrInfo->Wrong signal code "<<fdsi.ssi_code<<std::endl;
+            log.error()<<"AddrInfo->Wrong signal code "<<fdsi.ssi_code<<std::endl;
             continue;
         }
         error_c ec = eai_code(&req);
@@ -153,7 +154,7 @@ auto AddrInfo::epollIN() -> int {
 
 void AddrInfo::cleanup() {
     close(_sfd);
-    log::debug()<<"Cleanup called"<<std::endl;
+    log.debug()<<"Cleanup called"<<std::endl;
 }
 
 class AddressResolverImpl : public AddressResolver {
@@ -248,7 +249,7 @@ public:
         }
         error_c ret = resolve_interface_ip4(interface, port, Interface::BROADCAST);
         if (ret) {
-            log::error()<<"No broadcast address found on "<<interface<<std::endl;
+            log.error()<<"No broadcast address found on "<<interface<<std::endl;
             on_error(ret);
         }
     }

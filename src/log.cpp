@@ -1,24 +1,20 @@
 #include <unistd.h>
 #include <iostream>
+#include <map>
+#include <utility>
 #include <avahi-core/log.h>
 #include "log.h"
 
-namespace log {
+namespace Log {
     class NullBuffer : public std::streambuf {
     public:
       auto overflow(int c) -> int final { return c; }
     };
     NullBuffer null_buffer;
     std::ostream null_stream(&null_buffer);
-
-    static Level max_level = Level::INFO;
     static bool use_color = false;
 
-    void set_level(Level level) {
-        max_level = level;
-    }
-
-    auto log(Level level) -> std::ostream& {
+    auto _log(Level level, Level max_level) -> std::ostream& {
         if (max_level<level) return null_stream;
         if (use_color) {
             switch (level) {
@@ -41,7 +37,19 @@ namespace log {
         return std::cerr;
     }
 
+    static std::map<std::string, Log*> loggers;
+
+    Log::Log(std::string name):_name(std::move(name)) {
+        loggers.emplace(_name,this);
+    };
+    Log::~Log() { loggers.erase(_name);
+    }
+        
+    void Log::set_level(Level level) {max_level = level;}   
+    auto Log::log(Level level) -> std::ostream& { return _log(Level::DEBUG, max_level); }
+
     void avahiLogFunction(AvahiLogLevel level, const char *txt) {
+        static Log log("libavahi");
         Level l=Level::DEBUG;
         switch(level) {
         case AVAHI_LOG_ERROR : l = Level::ERROR; break;
@@ -51,7 +59,7 @@ namespace log {
         case AVAHI_LOG_DEBUG : l = Level::DEBUG; break;
         case AVAHI_LOG_LEVEL_MAX: break;
         }
-        log(l)<<txt<<std::endl;
+        log.log(l)<<txt<<std::endl;
     }
 
     void init() {
@@ -59,9 +67,29 @@ namespace log {
         avahi_set_log_function(avahiLogFunction);
     }
 
-    auto debug() -> std::ostream&   { return log(Level::DEBUG);  }
-    auto info() -> std::ostream&    { return log(Level::INFO);   }
-    auto notice() -> std::ostream&  { return log(Level::NOTICE); }
-    auto warning() -> std::ostream& { return log(Level::WARNING);}
-    auto error() -> std::ostream&   { return log(Level::ERROR);  }
+    Log l("default");
+
+    auto debug() -> std::ostream&   { return l.log(Level::DEBUG);  }
+    auto info() -> std::ostream&    { return l.log(Level::INFO);   }
+    auto notice() -> std::ostream&  { return l.log(Level::NOTICE); }
+    auto warning() -> std::ostream& { return l.log(Level::WARNING);}
+    auto error() -> std::ostream&   { return l.log(Level::ERROR);  }
+
+    void set_level(Level level, std::initializer_list<std::string> lognames) {
+        if (lognames.size()==0) {
+            l.set_level(level);
+            return;
+        }
+        for(auto name : lognames) {
+            if (name=="all") {
+                for (auto& l : loggers) {
+                    l.second->set_level(level);
+                }
+                return;
+            }
+            auto it = loggers.find(name);
+            if (it==loggers.end()) continue;
+            it->second->set_level(level);
+        }
+    }
 }

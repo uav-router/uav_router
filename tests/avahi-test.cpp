@@ -171,8 +171,8 @@ void avahi_browser() {
 }
 
 int main() {
-    log::init();
-    log::set_level(log::Level::DEBUG);
+    Log::init();
+    Log::set_level(Log::Level::DEBUG,{"libavahi","avahi"});
     avahi_browser();
     //avahi_register();
     //auto_port();

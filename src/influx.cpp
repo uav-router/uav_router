@@ -5,7 +5,7 @@
 #include <memory>
 #include <sstream>
 #include <deque>
-
+static Log::Log log("influx");
 class InfluxStream : public OStat {
 public:
     void init(  std::unique_ptr<IOWriteable> out, 
@@ -85,7 +85,7 @@ public:
         auto udp = UdpClient::create("influx_udp");
         udp->init(host,port,loop);
         udp->on_error([](const error_c& ec) {
-            log::error()<<"Influx socket error:"<<ec<<std::endl;
+            log.error()<<"Influx socket error:"<<ec<<std::endl;
         });
         udp->on_write_allowed([this](){ flush(); });
         InfluxStream::init(std::move(udp), global_tags,pack_size,queue_max_size,queue_shrink_size);
@@ -103,7 +103,7 @@ public:
         auto file = OFile::create();
         file->init(filename);
         file->on_error([](const error_c& ec) {
-            log::error()<<"Influx file error: "<<ec<<std::endl;
+            log.error()<<"Influx file error: "<<ec<<std::endl;
         });
         InfluxStream::init(std::move(file), global_tags,pack_size,queue_max_size,queue_shrink_size);
     }

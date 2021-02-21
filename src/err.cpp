@@ -89,7 +89,7 @@ auto error_handler::on_error(error_c& ec, const std::string& place) -> bool {
     if (!place.empty()) ec.add_place(place);
     if (_on_error) { _on_error(ec);
     } else {
-        log::error()<<ec<<std::endl;
+        Log::error()<<ec<<std::endl;
     }
     return true;
 }
@@ -100,7 +100,7 @@ auto error_handler::on_error(int ret, const std::string& place) -> bool {
     if (!place.empty()) ec.add_place(place);
     if (_on_error) { _on_error(ec);
     } else {
-        log::error()<<ec<<std::endl;
+        Log::error()<<ec<<std::endl;
     }
     return true;
 }
