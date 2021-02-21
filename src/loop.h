@@ -56,7 +56,6 @@ public:
     IOLoop(int size=8);
     ~IOLoop() override;
     // poll
-    auto execute(IOPollable* obj) -> error_c;
     auto add(int fd, uint32_t events, IOPollable* obj) -> errno_c;
     auto mod(int fd, uint32_t events, IOPollable* obj) -> errno_c;
     auto del(int fd, IOPollable* obj) -> errno_c;

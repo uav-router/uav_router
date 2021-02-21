@@ -482,9 +482,6 @@ IOLoop::IOLoop(int size):_impl{new IOLoopImpl{size}} {}
 
 IOLoop::~IOLoop() = default;
 
-auto IOLoop::execute(IOPollable* obj) -> error_c {
-    return obj->start_with(this);
-}
 auto IOLoop::add(int fd, uint32_t events, IOPollable* obj) -> errno_c {
     errno_c ret = _impl->_epoll.add(fd, events, obj);
     if (!ret) {

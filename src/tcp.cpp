@@ -169,7 +169,7 @@ public:
         _addr_resolver->on_error(on_err);
         _addr_resolver->on_resolve([this](addrinfo* ai) {
             _tcp.init(ai);
-            error_c ret = _loop->execute(&_tcp);
+            error_c ret = _tcp.start_with(_loop);
             if (ret) { on_error(ret,_name);
             }
         });
@@ -191,7 +191,7 @@ public:
                                 SockAddr addr, std::vector<std::pair<std::string,std::string>> txt,
                                 AvahiLookupResultFlags flags){
             _tcp.init(std::move(addr));
-            error_c ret = _loop->execute(&_tcp);
+            error_c ret = _tcp.start_with(_loop);
             on_error(ret,_name);
         });
     }
@@ -527,7 +527,7 @@ public:
         _addr_resolver->on_error(on_err);
         _addr_resolver->on_resolve([this](addrinfo* ai) {
             _tcp.init(ai);
-            error_c ret = _loop->execute(&_tcp);
+            error_c ret = _tcp.start_with(_loop);
             if (ret) { on_error(ret,"tcp client");
             }
         });

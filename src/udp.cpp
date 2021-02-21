@@ -268,7 +268,7 @@ public:
         _udp.on_write_allowed([this](){write_allowed();});
     }
     void execute() {
-        error_c ec = _loop->execute(&_udp);
+        error_c ec = _udp.start_with(_loop);
         if (!on_error(ec,_name)) {
             _is_writeable = true;
             if (_on_connect) { _on_connect();
@@ -399,7 +399,7 @@ public:
         _loop = loop;
         _addr_resolver->on_resolve([this](addrinfo* ai) {
             _udp.init(ai, false);
-            error_c ec = _loop->execute(&_udp);
+            error_c ec = _udp.start_with(_loop);
             _is_writeable = !on_error(ec,"udp server");
         });
         _addr_resolver->local(port,_loop,host);
@@ -408,7 +408,7 @@ public:
         _loop = loop;
         _addr_resolver->on_resolve([this](addrinfo* ai) {
             _udp.init(ai, false);
-            error_c ec = _loop->execute(&_udp);
+            error_c ec = _udp.start_with(_loop);
             _is_writeable = !on_error(ec,"udp server");
         });
         _addr_resolver->local_interface(interface, port,_loop);
@@ -417,7 +417,7 @@ public:
         _loop = loop;
         _addr_resolver->on_resolve([this](addrinfo* ai) {
             _udp.init(ai, true);
-            error_c ec = _loop->execute(&_udp);
+            error_c ec = _udp.start_with(_loop);
             _is_writeable = !on_error(ec,"udp server");
         });
         _addr_resolver->broadcast(port,_loop,interface);
@@ -440,7 +440,7 @@ public:
         if (ret) { addr.init(INADDR_ANY, port);
         }
         _udp.init_multicast(maddr, addr, 0);
-        error_c ec = _loop->execute(&_udp);
+        error_c ec = _udp.start_with(_loop);
         _is_writeable = !on_error(ec,"udp server");
     }
     void init_service(const std::string& service_name, const std::string& interface, IOLoop* loop) override {

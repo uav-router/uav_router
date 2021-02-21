@@ -70,7 +70,7 @@ void addr_info_result(addrinfo* addr, const std::error_code& res) {
 int timer_test() {
     Timer request;
     IOLoop loop;
-    loop.execute(&request);
+    request.start_with(&loop);
     request.arm_periodic(2s);
     request.on_shoot_func([] () {std::cout<<"Timer event"<<std::endl;});
     loop.run();

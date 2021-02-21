@@ -255,7 +255,7 @@ public:
     }
     
     void start_address_resolving() {
-        error_c ret = _loop->execute(&_ai);
+        error_c ret = _ai.start_with(_loop);
         if (on_error(ret,"address_resolving")) return;
         _ai.on_result_func([this](addrinfo* ai, std::error_code& ec){
             on_addrinfo(ai,ec);
@@ -265,7 +265,7 @@ public:
     void on_addrinfo(addrinfo* ai, std::error_code& ec) {
         error_c err(ec.value(),ec.category());
         if (on_error(err,"addrinfo")) {
-            error_c ret = _loop->execute(&_timer);
+            error_c ret = _timer.start_with(_loop);
             if (on_error(ret,"execute timer")) return;
             ret = _timer.arm_oneshoot(5s);
             if (on_error(ret,"arm timer")) return;

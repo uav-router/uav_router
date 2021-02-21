@@ -83,7 +83,7 @@ public:
         error_c ret = init_uart();
         if (on_error(ret,"init_uart")) {
             if (!_usb_id.empty() && ret == std::error_condition(std::errc::no_such_device)) return;
-            ret = _loop->execute(&_timer);
+            ret = _timer.start_with(_loop);
             if (on_error(ret,"recreate timer")) return;
             ret = _timer.arm_oneshoot(5s);
             if (on_error(ret,"rearm timer")) return;
