@@ -127,6 +127,83 @@ int tcp_test() {
     return 0;
 }
 
+int tcp_service_test() {
+    IOLoop loop;
+    
+    std::unique_ptr<TcpClient> client;
+    Timer timer;
+    int tryno = 0;
+    bool first_write = true;
+    timer.on_shoot_func([&client,&tryno, &loop, &first_write](){
+        client = TcpClient::create("ClientEndpoint");
+        client->init_service("tcptester",&loop,"tap0");
+        client->on_error([](const error_c& ec) {
+            std::cout<<"Tcp client socket error:"<<ec<<std::endl;
+        });
+        client->on_read([](void* buf, int len) {
+            std::cout<<"Tcp client: ";
+            std::cout.write((char*)buf,len);
+            std::cout<<std::endl;
+        });
+        client->on_write_allowed([&client,&tryno, &first_write]() {
+            std::cout<<"client socket write allowed "<<first_write<<std::endl;
+            if (!first_write) return;
+            first_write = false;
+            std::cout<<"client socket connected"<<std::endl;
+            char buf[256];
+            int size = snprintf(buf,sizeof(buf),"Hello %i!",tryno++);
+            client->write(buf,size);
+            std::cout<<"client connect func end"<<std::endl;
+        });
+        client->on_close([&first_write]() {
+            first_write = true;
+            std::cout<<"socket disconnected"<<std::endl;
+        });
+    });
+    timer.start_with(&loop);
+    timer.arm_periodic(3s);
+
+    
+    std::unordered_set<std::unique_ptr<TcpSocket>> sockets;
+    auto server = TcpServer::create("ServerEndpoint");
+    server->init_service("tcptester","tap0",&loop);
+    server->on_connect([&sockets](std::unique_ptr<TcpSocket>& socket, sockaddr* addr, socklen_t len){
+        print_addr(addr,len);
+        auto ret = sockets.insert(std::move(socket));
+        if (std::get<1>(ret)) {
+            auto sock = std::get<0>(ret);
+            (*sock)->write("Hello!",6);
+            (*sock)->on_read([](void* buf, int len){
+                std::cout<<"Tcp server: ";
+                std::cout.write((char*)buf,len);
+                std::cout<<std::endl;
+            });
+            (*sock)->on_close([sock, &sockets](){
+                std::cout<<"Tcp socket closed "<<sockets.size()<<std::endl;
+                sockets.erase(sock);
+                std::cout<<"Tcp socket closed end "<<sockets.size()<<std::endl;
+            });
+            (*sock)->on_error([](const error_c& ec) {
+                std::cout<<"Tcp server socket error:"<<ec<<std::endl;
+            });
+        } else {
+            std::cout<<"Error: socket can not inserted to set"<<std::endl;
+        }
+    });
+    server->on_close([](){
+        std::cout<<"Server closed"<<std::endl;
+    });
+    server->on_error([](const error_c& ec) {
+        std::cout<<"Tcp server error:"<<ec<<std::endl;
+    });
+
+    //loop.add_stat_output(influx_udp("192.168.0.111", 8090, &loop));
+    loop.add_stat_output(influx_file("influx.txt"));
+    loop.run();
+    return 0;
+}
+
+
 int tcp_server_test() {
     IOLoop loop;
     std::unique_ptr<TcpServer> tcp = TcpServer::create("MyEndpoint");
@@ -162,7 +239,7 @@ int main() {
     log::init();
     log::set_level(log::Level::DEBUG);
 
-    return tcp_test();
+    return tcp_service_test();
 }
 
 /*int test_tcp_client_base() {
