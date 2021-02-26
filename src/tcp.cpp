@@ -163,7 +163,7 @@ private:
 
 class TcpClientImpl : public TcpClient {
 public:
-    TcpClientImpl(std::string name):_name(std::move(name)),_addr_resolver{AddressResolver::create()} {
+    TcpClientImpl(std::string name, IOLoop* loop):_name(std::move(name)),_addr_resolver{AddressResolver::create()},_loop(loop) {
         auto on_err = [this](error_c& ec){ on_error(ec,_name);};
         _tcp.on_error(on_err);
         _addr_resolver->on_error(on_err);
@@ -175,13 +175,11 @@ public:
         });
         _tcp.on_write_allowed([this](){write_allowed();});
     }
-    void init(const std::string& host, uint16_t port, IOLoop* loop) override {
-        _loop = loop;
-        _addr_resolver->remote(host,port,loop);
+    void init(const std::string& host, uint16_t port) override {
+        _addr_resolver->remote(host,port,_loop);
     }
 
-    void init_service(const std::string& service_name, IOLoop* loop, const std::string& interface="") override {
-        _loop = loop;
+    void init_service(const std::string& service_name, const std::string& interface="") override {
         _query = _loop->query_service(CAvahiService(service_name,"_pktstream._tcp").set_interface(interface).set_ipv4());
         _query->on_failure([this](error_c ec){on_error(ec,_name);});
         _query->on_remove([this](CAvahiService service, AvahiLookupResultFlags flags){
@@ -218,8 +216,8 @@ public:
     std::unique_ptr<AvahiQuery> _query;
 };
 
-auto TcpClient::create(const std::string& name) -> std::unique_ptr<TcpClient> {
-    return std::unique_ptr<TcpClient>{new TcpClientImpl(name)};
+auto TcpClient::create(const std::string& name, IOLoop* loop) -> std::unique_ptr<TcpClient> {
+    return std::unique_ptr<TcpClient>{new TcpClientImpl(name,loop)};
 }
 
 class TcpSocketImpl final : public IOPollable, public TcpSocket {
@@ -456,14 +454,12 @@ public:
             CAvahiService(name,"_portclaim._tcp").set_ipv4().set_interface(_service_itf),
             port_finder.port()
         );
-        if (ec) {
-            log.error()<<"Error adding service "<<_service_name<<": "<<ec<<std::endl;
+        if (on_error(ec,"Error adding service "+_service_name)) {
             ec = g->reset();
-            if (ec) log.error()<<"Error reset service "<<_service_name<<": "<<ec<<std::endl;
         } else {
             ec = g->commit();
-            if (ec) log.error()<<"Error commit service "<<_service_name<<": "<<ec<<std::endl;
         }
+        on_error(ec);
     }
 
     auto start_with(IOLoop* loop) -> error_c override {
@@ -483,8 +479,8 @@ public:
             log.info()<<"Service registered"<<std::endl;
             
         });
-        _group->on_failure([](error_c ec){ 
-            log.info()<<"Group error"<<ec<<std::endl;
+        _group->on_failure([this](error_c ec){ 
+            on_error(ec,"Group failure");
         });
         _group->create();
         return error_c();
@@ -521,7 +517,7 @@ private:
 
 class TcpServerImpl : public TcpServer {
 public:
-    TcpServerImpl(std::string  name):_name(std::move(name)),_addr_resolver{AddressResolver::create()} {
+    TcpServerImpl(std::string  name, IOLoop* loop):_name(std::move(name)),_addr_resolver{AddressResolver::create()}, _loop(loop) {
         auto on_err = [this](error_c& ec){ on_error(ec,_name);};
         _tcp.on_error(on_err);
         _addr_resolver->on_error(on_err);
@@ -533,18 +529,15 @@ public:
         });
     };
     
-    void init(uint16_t port, IOLoop* loop, const std::string& host="") override {
-        _loop = loop;
+    void init(uint16_t port, const std::string& host="") override {
         _tcp.clear_service_info();
         _addr_resolver->local(port,_loop,host);
     }
-    void init_interface(const std::string& interface, uint16_t port, IOLoop* loop) override {
-        _loop = loop;
+    void init_interface(const std::string& interface, uint16_t port) override {
         _tcp.clear_service_info();
         _addr_resolver->local_interface(interface,port,_loop);
     }
-    void init_service(const std::string& service_name, const std::string& interface, IOLoop* loop) override {
-        _loop = loop;
+    void init_service(const std::string& service_name, const std::string& interface) override {
         _tcp.set_service_info(service_name,interface);
         if (interface.empty()) { 
             _addr_resolver->local(0,_loop);
@@ -565,6 +558,6 @@ private:
     TcpServerBase _tcp;
 };
 
-auto TcpServer::create(const std::string& name) -> std::unique_ptr<TcpServer> {
-    return std::unique_ptr<TcpServer>{new TcpServerImpl(name)};
+auto TcpServer::create(const std::string& name, IOLoop *loop) -> std::unique_ptr<TcpServer> {
+    return std::unique_ptr<TcpServer>{new TcpServerImpl(name,loop)};
 }

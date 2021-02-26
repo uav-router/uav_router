@@ -82,8 +82,8 @@ public:
                 int queue_max_size,
                 int queue_shrink_size
                 ) {
-        auto udp = UdpClient::create("influx_udp");
-        udp->init(host,port,loop);
+        auto udp = UdpClient::create("influx_udp",loop);
+        udp->init(host,port);
         udp->on_error([](const error_c& ec) {
             log.error()<<"Influx socket error:"<<ec<<std::endl;
         });

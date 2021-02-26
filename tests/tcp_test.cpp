@@ -24,8 +24,8 @@ void print_addr(const struct sockaddr *sa, socklen_t salen) {
 
 int tcp_client_test() {
     IOLoop loop;
-    auto tcp = TcpClient::create("MyEndpoint");
-    tcp->init("192.168.0.25",10000,&loop);
+    auto tcp = TcpClient::create("MyEndpoint",&loop);
+    tcp->init("192.168.0.25",10000);
     tcp->on_error([&tcp](const error_c& ec) {
         std::cout<<"Tcp socket error:"<<ec<<std::endl;
     });
@@ -52,8 +52,8 @@ int tcp_test() {
     int tryno = 0;
     bool first_write = true;
     timer.on_shoot_func([&client,&tryno, &loop, &first_write](){
-        client = TcpClient::create("ClientEndpoint");
-        client->init("192.168.0.25",10000,&loop);
+        client = TcpClient::create("ClientEndpoint",&loop);
+        client->init("192.168.0.25",10000);
         client->on_error([](const error_c& ec) {
             std::cout<<"Tcp client socket error:"<<ec<<std::endl;
         });
@@ -89,8 +89,8 @@ int tcp_test() {
 
     
     std::unordered_set<std::unique_ptr<TcpSocket>> sockets;
-    auto server = TcpServer::create("ServerEndpoint");
-    server->init(10000,&loop);
+    auto server = TcpServer::create("ServerEndpoint",&loop);
+    server->init(10000);
     server->on_connect([&sockets](std::unique_ptr<TcpSocket>& socket, sockaddr* addr, socklen_t len){
         print_addr(addr,len);
         auto ret = sockets.insert(std::move(socket));
@@ -135,8 +135,8 @@ int tcp_service_test() {
     int tryno = 0;
     bool first_write = true;
     timer.on_shoot_func([&client,&tryno, &loop, &first_write](){
-        client = TcpClient::create("ClientEndpoint");
-        client->init_service("tcptester",&loop,"tap0");
+        client = TcpClient::create("ClientEndpoint",&loop);
+        client->init_service("tcptester","tap0");
         client->on_error([](const error_c& ec) {
             std::cout<<"Tcp client socket error:"<<ec<<std::endl;
         });
@@ -165,8 +165,8 @@ int tcp_service_test() {
 
     
     std::unordered_set<std::unique_ptr<TcpSocket>> sockets;
-    auto server = TcpServer::create("ServerEndpoint");
-    server->init_service("tcptester","tap0",&loop);
+    auto server = TcpServer::create("ServerEndpoint",&loop);
+    server->init_service("tcptester","tap0");
     server->on_connect([&sockets](std::unique_ptr<TcpSocket>& socket, sockaddr* addr, socklen_t len){
         print_addr(addr,len);
         auto ret = sockets.insert(std::move(socket));
@@ -206,9 +206,9 @@ int tcp_service_test() {
 
 int tcp_server_test() {
     IOLoop loop;
-    std::unique_ptr<TcpServer> tcp = TcpServer::create("MyEndpoint");
+    std::unique_ptr<TcpServer> tcp = TcpServer::create("MyEndpoint",&loop);
     std::unordered_set<std::unique_ptr<TcpSocket>> sockets;
-    tcp->init(10000,&loop);
+    tcp->init(10000);
     tcp->on_connect([&sockets](std::unique_ptr<TcpSocket>& socket, sockaddr* addr, socklen_t len){
         print_addr(addr,len);
         auto ret = sockets.insert(std::move(socket));

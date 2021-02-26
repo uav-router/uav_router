@@ -68,7 +68,8 @@ public:
     inline void on_error(callback_t func) { _on_error = func;
     }
 protected:
-    auto on_error(error_c& ec, const std::string& place = "") -> bool;
+    auto on_error(error_c& ec, const std::string& place) -> bool;
+    auto on_error(error_c ec) -> bool;
     auto on_error(int ret, const std::string& place = "") -> bool;
 private:
     callback_t _on_error;

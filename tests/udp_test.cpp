@@ -8,8 +8,8 @@
 
 int udp_client_test() {
     IOLoop loop;
-    auto udp = UdpClient::create("MyEndpoint");
-    udp->init("localhost",20001, &loop);
+    auto udp = UdpClient::create("MyEndpoint", &loop);
+    udp->init("localhost",20001);
     udp->on_read([](void* buf, int len){
         std::cout.write((char*)buf,len);
         std::cout<<std::endl;
@@ -44,8 +44,8 @@ int udp_server_test() {
 int udp_test() {
     IOLoop loop;
 
-    auto server = UdpServer::create("ServerEndpoint");
-    server->init(20001, &loop);
+    auto server = UdpServer::create("ServerEndpoint", &loop);
+    server->init(20001);
     std::shared_ptr<UdpStream> client_stream;
     server->on_connect([&client_stream](std::shared_ptr<UdpStream> stream){
         client_stream = stream;
@@ -61,8 +61,8 @@ int udp_test() {
         std::cout<<"Udp socket error:"<<ec<<std::endl;
     });
 
-    auto client = UdpClient::create("ClientEndpoint");
-    client->init("localhost",20001, &loop);
+    auto client = UdpClient::create("ClientEndpoint", &loop);
+    client->init("localhost",20001);
     client->on_read([](void* buf, int len){
         std::cout<<"Client reads: ";
         std::cout.write((char*)buf,len);

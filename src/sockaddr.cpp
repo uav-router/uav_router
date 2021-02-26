@@ -1,4 +1,5 @@
 #include <cstring>
+#include <sstream>
 #include <linux/if_link.h>
 #include <arpa/inet.h>
 #include "sockaddr.h"
@@ -155,6 +156,12 @@ auto SockAddr::port() -> uint16_t {
     return 0;
 }
 
+void SockAddr::set_port(uint16_t port) {
+    if (!_impl) return;
+    if (_impl->addr.storage.ss_family==AF_INET) _impl->addr.in.sin_port = htons(port);
+    if (_impl->addr.storage.ss_family==AF_INET6) _impl->addr.in6.sin6_port = htons(port);
+}
+
 auto SockAddr::operator=(const SockAddr& other) -> SockAddr& {
     if (this != &other) {
         if (!_impl) _impl = std::make_unique<SockAddrImpl>();
@@ -186,6 +193,30 @@ auto operator<(const SockAddr& addr1, const SockAddr& addr2) -> bool {
         return memcmp(&addr1._impl->addr,&addr2._impl->addr,addr1._impl->length)<0;
     }
     return bool(addr1._impl);
+}
+
+auto SockAddr::format(Format f) -> std::string {
+    std::stringstream fmt;
+    if (_impl) {
+        if (_impl->length) {
+            if (_impl->addr.storage.ss_family==AF_INET) {
+                std::array<char,256> buf;
+                if (f == REG_SERVICE) {
+                    fmt<<ntohs(_impl->addr.in.sin_port)<<"."<<inet_ntop(AF_INET, &_impl->addr.in.sin_addr,buf.data(),buf.size());
+                } else if (f == IPADDR_ONLY) {
+                    fmt<<inet_ntop(AF_INET, &_impl->addr.in.sin_addr,buf.data(),buf.size());
+                }
+            } else if (_impl->addr.storage.ss_family==AF_INET6) {
+                std::array<char,256> buf;
+                if (f == REG_SERVICE) {
+                    fmt<<ntohs(_impl->addr.in6.sin6_port)<<"."<<inet_ntop(AF_INET6, &_impl->addr.in6.sin6_addr,buf.data(),buf.size());
+                } else if (f == IPADDR_ONLY) {
+                    fmt<<inet_ntop(AF_INET6, &_impl->addr.in6.sin6_addr,buf.data(),buf.size());
+                }
+            }
+        }
+    }
+    return fmt.str();
 }
 
 auto operator<<(std::ostream &os, const SockAddr &addr) -> std::ostream& {

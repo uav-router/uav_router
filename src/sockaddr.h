@@ -35,12 +35,18 @@ public:
   
   auto ip4_addr_t() -> in_addr_t;
   auto port() -> uint16_t;
+  void set_port(uint16_t port);
   
   auto bind(int fd) ->error_c;
   auto connect(int fd) ->error_c;
 
   auto operator=(const SockAddr &other) -> SockAddr &;
   auto operator=(SockAddr &&other) noexcept -> SockAddr &;
+  enum Format {
+    REG_SERVICE,
+    IPADDR_ONLY
+  };
+  auto format(Format f) -> std::string;
   friend auto operator<<(std::ostream &os, const SockAddr &addr) -> std::ostream&;
   friend auto operator<(const SockAddr& addr1, const SockAddr& addr2) -> bool;
 
