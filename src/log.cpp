@@ -38,12 +38,13 @@ namespace Log {
         return std::cerr;
     }
 
-    static std::map<std::string, Log*> loggers;
+    static std::map<std::string, Log*> *loggers = nullptr;
 
     Log::Log(std::string name):_name(std::move(name)) {
-        loggers.emplace(_name,this);
+        if (!loggers) loggers = new std::map<std::string, Log*>();
+        loggers->emplace(_name,this);
     };
-    Log::~Log() { loggers.erase(_name);
+    Log::~Log() { loggers->erase(_name);
     }
         
     void Log::set_level(Level level) {max_level = level;}   
@@ -83,13 +84,13 @@ namespace Log {
         }
         for(auto name : lognames) {
             if (name=="all") {
-                for (auto& l : loggers) {
+                for (auto& l : *loggers) {
                     l.second->set_level(level);
                 }
                 return;
             }
-            auto it = loggers.find(name);
-            if (it==loggers.end()) continue;
+            auto it = loggers->find(name);
+            if (it==loggers->end()) continue;
             it->second->set_level(level);
         }
     }
