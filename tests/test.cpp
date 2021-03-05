@@ -171,6 +171,16 @@ int getifaddr_test() {
 
 int uart_test() {
     IOLoop loop;
+    error_c ec = loop.handle_CtrlC();
+    if (ec) {
+        std::cout<<"Ctrl-C handler error "<<ec<<std::endl;
+        return 1;
+    }
+    ec = loop.handle_udev();
+    if (ec) {
+        std::cout<<"Udev handler error "<<ec<<std::endl;
+        return 1;
+    }
     auto uart = UART::create("UartEndpoint");
     uart->init("/dev/ttyUSB0",&loop,115200);//921600);
     uart->on_connect([]() {

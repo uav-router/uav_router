@@ -64,6 +64,7 @@ public:
     void udev_stop_watch(IOPollable* obj);
     auto udev_find_id(const std::string& path) -> std::string;
     auto udev_find_path(const std::string& id) -> std::string;
+    auto handle_udev() -> error_c;
     // stats
     void add_stat_output(std::unique_ptr<OStat> out);
     void clear_stat_outputs();
@@ -72,9 +73,17 @@ public:
     // zeroconf
     auto query_service(CAvahiService pattern, AvahiLookupFlags flags=(AvahiLookupFlags)0) -> std::unique_ptr<AvahiQuery> override;
     auto get_register_group() -> std::unique_ptr<AvahiGroup> override;
+    enum ServiceType {
+        UDP,
+        TCP
+    };
+    auto service_exists(const std::string& service_name) ->bool;
+    auto get_service_info(const std::string& service_name, const std::string& interface, ServiceType type)->bool;
+    auto handle_zeroconf() -> error_c;
     // run
     auto run() -> int;
     void stop();
+    auto handle_CtrlC() -> error_c;
 private:
     class IOLoopImpl;
     std::unique_ptr<IOLoopImpl> _impl;

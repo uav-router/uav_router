@@ -8,6 +8,11 @@ using namespace std::chrono_literals;
 
 void test() {
     IOLoop loop;
+    error_c ec = loop.handle_CtrlC();
+    if (ec) {
+        std::cout<<"Ctrl-C handler error "<<ec<<std::endl;
+        return;
+    }
     auto timer = std::make_unique<Timer>();
     timer->on_shoot_func([&timer](){
         std::cout<<"Shoot func"<<std::endl;

@@ -48,7 +48,7 @@
             "name": "tcptest",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/build/tcptest",
+            "program": "${workspaceFolder}/build/tcp_test",
             "args": [],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",

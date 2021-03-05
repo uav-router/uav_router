@@ -8,6 +8,11 @@
 
 int udp_client_test() {
     IOLoop loop;
+    error_c ec = loop.handle_CtrlC();
+    if (ec) {
+        std::cout<<"Ctrl-C handler error "<<ec<<std::endl;
+        return 1;
+    }
     auto udp = UdpClient::create("MyEndpoint", &loop);
     udp->init("localhost",20001);
     udp->on_read([](void* buf, int len){
@@ -43,7 +48,11 @@ int udp_server_test() {
 
 int udp_test() {
     IOLoop loop;
-
+    error_c ec = loop.handle_CtrlC();
+    if (ec) {
+        std::cout<<"Ctrl-C handler error "<<ec<<std::endl;
+        return 1;
+    }
     auto server = UdpServer::create("ServerEndpoint", &loop);
     server->init(20001);
     std::shared_ptr<UdpStream> client_stream;

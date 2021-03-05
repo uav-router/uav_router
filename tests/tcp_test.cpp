@@ -24,6 +24,11 @@ void print_addr(const struct sockaddr *sa, socklen_t salen) {
 
 int tcp_client_test() {
     IOLoop loop;
+    error_c ec = loop.handle_CtrlC();
+    if (ec) {
+        std::cout<<"Ctrl-C handler error "<<ec<<std::endl;
+        return 1;
+    }
     auto tcp = TcpClient::create("MyEndpoint",&loop);
     tcp->init("192.168.0.25",10000);
     tcp->on_error([&tcp](const error_c& ec) {
@@ -46,7 +51,11 @@ int tcp_client_test() {
 
 int tcp_test() {
     IOLoop loop;
-    
+    error_c ec = loop.handle_CtrlC();
+    if (ec) {
+        std::cout<<"Ctrl-C handler error "<<ec<<std::endl;
+        return 1;
+    }
     std::unique_ptr<TcpClient> client;
     Timer timer;
     int tryno = 0;
@@ -129,7 +138,11 @@ int tcp_test() {
 
 int tcp_service_test() {
     IOLoop loop;
-    
+    error_c ec = loop.handle_CtrlC();
+    if (ec) {
+        std::cout<<"Ctrl-C handler error "<<ec<<std::endl;
+        return 1;
+    }
     std::unique_ptr<TcpClient> client;
     Timer timer;
     int tryno = 0;
@@ -206,6 +219,11 @@ int tcp_service_test() {
 
 int tcp_server_test() {
     IOLoop loop;
+    error_c ec = loop.handle_CtrlC();
+    if (ec) {
+        std::cout<<"Ctrl-C handler error "<<ec<<std::endl;
+        return 1;
+    }
     std::unique_ptr<TcpServer> tcp = TcpServer::create("MyEndpoint",&loop);
     std::unordered_set<std::unique_ptr<TcpSocket>> sockets;
     tcp->init(10000);
@@ -239,7 +257,8 @@ int main() {
     Log::init();
     Log::set_level(Log::Level::DEBUG,{"tcp"});
 
-    return tcp_service_test();
+    return tcp_test();
+    //return tcp_service_test();
 }
 
 /*int test_tcp_client_base() {

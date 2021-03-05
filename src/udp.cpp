@@ -261,13 +261,22 @@ public:
         register_service(g,port,name);
     }
     void create_service(AvahiGroup* g) {
+        if (_loop->service_exists(_service_name)) {
+            l.error()<<"Service "<<_service_name<<" exists"<<std::endl;
+            return;
+        }
         if (! (_multicast || _broadcast)) {
             create_ordinal_service(g);
             return;
         }
-        uint16_t port = get_port();
-        _addr.set_port(port);
-        std::string claim_name = _addr.format(SockAddr::Format::REG_SERVICE)+".udp";
+        std::string claim_name;
+        uint16_t port;
+        while (true) {
+            port = get_port();
+            _addr.set_port(port);
+            claim_name = _addr.format(SockAddr::Format::REG_SERVICE)+".udp";
+            if (_loop->service_exists(_service_name)) break;
+        }
         if (_multicast) { 
             register_service(g, port, claim_name, {{"multicast",_addr.format(SockAddr::Format::IPADDR_ONLY)},{"ttl",std::to_string(_ttl)}});
             return;
@@ -450,6 +459,29 @@ public:
     }
 
     void init_service(const std::string& service_name, const std::string& interface="") override {
+        _query = _loop->get_service_info(service_name, interface);
+        _query->on_remove([this](SockAddr addr){ _udp.remove(std::move(addr)); });
+        _query->on_ordinal_service([this](SockAddr addr) {
+            _udp.init(std::move(addr));
+        });
+        _query->on_broadcast_service([this](SockAddr addr) {
+            _udp.init(std::move(addr),true);
+        }
+        _query->on_multicast_service([this,interface](SockAddr addr, int ttl) {
+            if(!_udp.is_run()) {
+                SockAddr ifaddr;
+                _addr_resolver->on_resolve([this,&ifaddr](addrinfo* addr_info) {
+                    ifaddr.init(addr_info->ai_addr,addr_info->ai_addrlen);
+                });
+                error_c ret = _addr_resolver->resolve_interface_ip4(interface,addr.port(),AddressResolver::Interface::ADDRESS);
+                if (ret) { ifaddr.init(INADDR_ANY, addr.port());
+                }
+                _udp.init_multicast(addr, ifaddr, ttl);
+            }
+        }
+        _query->run();
+
+
         _query = _loop->query_service(CAvahiService(service_name,"_pktstream._udp").set_interface(interface).set_ipv4());
         _query->on_failure([this](error_c ec){on_error(ec,_name);});
         //_query->on_complete([](){});

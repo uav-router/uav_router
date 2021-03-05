@@ -3,10 +3,11 @@
 #include <cstring>
 #include <sys/epoll.h>
 #include <sys/signalfd.h>
-#include <set>
 #include <map>
 #include <vector>
 #include <initializer_list>
+#include <forward_list>
+#include <unordered_set>
 #include <utility>
 #include <chrono>
 using namespace std::chrono_literals;
@@ -248,7 +249,7 @@ public:
     void flush() override {
         for(auto& ostat:ostats) ostat->flush();
     }
-    std::set<std::unique_ptr<OStat>> ostats;
+    std::forward_list<std::unique_ptr<OStat>> ostats;
 };
 
 class PeriodicStatCall {
@@ -291,13 +292,13 @@ public:
         _is_started = false;
     }
     void add(Stat* source, OStatSet* sink) {
-        _stats.insert(source);
+        _stats.push_front(source);
         _sink = sink;
         if (!_is_started) start();
     }
     void remove(Stat* source) {
-        _stats.erase(source);
-        if (_stats.size()==0 && _is_started) { stop();
+        _stats.remove(source);
+        if (_stats.empty() && _is_started) { stop();
         }
     }
 
@@ -305,7 +306,7 @@ public:
     Timer _timer;
     OStatSet* _sink = nullptr;
     IOLoop* _loop = nullptr;
-    std::set<Stat*> _stats;
+    std::forward_list<Stat*> _stats;
     std::chrono::nanoseconds _period;
 };
 
@@ -463,19 +464,54 @@ public:
     void on_error(error_c& ec) {
         log.error()<<"io loop->"<<ec<<std::endl;
     }
+    void zeroconf_remove(const std::string& name, const std::string& type) {
+
+    }
+    auto handle_zeroconf() -> error_c {
+        tcp_portclaim = avahi->query_service(CAvahiService("","_portclaim._tcp").set_ipv4());
+        //tcp_portclaim->on_failure([](error_c ec) {
+        //    std::cout<<"Query service error: "<<ec<<std::endl;
+        //});
+        tcp_portclaim->on_remove([this](CAvahiService service, AvahiLookupResultFlags flags){
+            //std::cout<<"REMOVE: service "<< service.name<<" of type "<<service.type<<" in domain '"<<service.domain<<"'"<<std::endl;
+            zeroconf_remove(service.name,service.type);
+        });
+        tcp_portclaim->on_resolve([](CAvahiService service, std::string host_name,
+            SockAddr addr, std::vector<std::pair<std::string,std::string>> txt,
+            AvahiLookupResultFlags flags){
+
+            std::cout<<"ADD: service "<< service.name<<" of type "<<service.type<<" in domain '"<<service.domain<<"'"<<std::endl;    
+            std::cout<<addr<<std::endl;
+            for (auto& rec : txt) {
+                if (rec.second.empty()) {
+                    std::cout<<rec.first<<std::endl;
+                } else {
+                    std::cout<<rec.first<<"="<<rec.second<<std::endl;
+                }
+            }
+        });
+        return error_c();
+    }
+
     Epoll _epoll;
     Signal stop_signal;
     UDevIO udev;
     int _sig_fd;
     int _size;
     bool _stop = false;
-    std::set<IOPollable*> watches;
-    std::set<IOPollable*> udev_watches;
+    std::forward_list<IOPollable*> watches;
+    std::forward_list<IOPollable*> udev_watches;
     OStatSet ostats;
     std::map<std::chrono::nanoseconds, PeriodicStatCall> statcalls;
     LoopStat stat;
     AvahiPoll avahi_poll;
     std::unique_ptr<AvahiHandler> avahi;
+    std::unique_ptr<AvahiQuery> udp_services;
+    std::unique_ptr<AvahiQuery> tcp_services;
+    std::unique_ptr<AvahiQuery> udp_portclaim;
+    std::unique_ptr<AvahiQuery> tcp_portclaim;
+    std::map<std::string, std::unordered_set<int>> udp_ports_busy;
+    std::map<std::string, std::unordered_set<int>> tcp_ports_busy;
 };
 
 IOLoop::IOLoop(int size):_impl{new IOLoopImpl{size}} {}
@@ -485,7 +521,7 @@ IOLoop::~IOLoop() = default;
 auto IOLoop::add(int fd, uint32_t events, IOPollable* obj) -> errno_c {
     errno_c ret = _impl->_epoll.add(fd, events, obj);
     if (!ret) {
-        _impl->watches.insert(obj);
+        _impl->watches.push_front(obj);
     }
     return ret;
 }
@@ -495,15 +531,15 @@ auto IOLoop::mod(int fd, uint32_t events, IOPollable* obj) -> errno_c {
 auto IOLoop::del(int fd, IOPollable* obj) -> errno_c {
     errno_c ret = _impl->_epoll.del(fd);
     if (!ret) {
-        _impl->watches.erase(obj);
+        _impl->watches.remove(obj);
     }
     return ret;
 }
 void IOLoop::udev_start_watch(IOPollable* obj) {
-    _impl->udev_watches.insert(obj);
+    _impl->udev_watches.push_front(obj);
 }
 void IOLoop::udev_stop_watch(IOPollable* obj) {
-    _impl->udev_watches.erase(obj);
+    _impl->udev_watches.remove(obj);
 }
 
 auto IOLoop::udev_find_id(const std::string& path) -> std::string {
@@ -514,9 +550,7 @@ auto IOLoop::udev_find_path(const std::string& id) -> std::string {
     return _impl->udev.find_path(id);
 }
 
-
-auto IOLoop::run() -> int {
-    log.debug()<<"run start"<<std::endl;
+auto IOLoop::handle_CtrlC() -> error_c {
     _impl->stop_signal.init({SIGINT,SIGTERM});
     _impl->stop_signal.on_signal([this](signalfd_siginfo* si) {
         log.info()<<"Signal: "<<strsignal(si->ssi_signo)<<std::endl;
@@ -525,9 +559,10 @@ auto IOLoop::run() -> int {
         _impl->_stop=true;
         return true;
     });
-    error_c ec = _impl->stop_signal.start_with(this);
-    if (ec) { _impl->on_error(ec);
-    }
+    return _impl->stop_signal.start_with(this);
+}
+
+auto IOLoop::handle_udev() -> error_c{
     _impl->udev.on_action([this](udev_device* dev){
         std::string action = udev_device_get_action(dev);
         std::string node = udev_device_get_devnode(dev);
@@ -549,10 +584,12 @@ auto IOLoop::run() -> int {
             }
         }
     });
+    return _impl->udev.start_with(this);
+}
+
+auto IOLoop::run() -> int {
+    log.debug()<<"run start"<<std::endl;
     register_report(&_impl->stat,100ms);
-    ec = _impl->udev.start_with(this);
-    if (ec) { _impl->on_error(ec);
-    }
     std::vector<epoll_event> events(_impl->_size);
     while(!_impl->_stop) {
         int r = _impl->_epoll.wait(events.data(), events.size());
@@ -620,7 +657,7 @@ void IOLoop::stop() { _impl->_stop=true; }
 
 void IOLoop::add_stat_output(std::unique_ptr<OStat> out) {
     bool ostats_empty = _impl->ostats.ostats.empty();
-    _impl->ostats.ostats.insert(std::move(out));
+    _impl->ostats.ostats.push_front(std::move(out));
     if (ostats_empty && !_impl->statcalls.empty()) {
         for(auto& statcall: _impl->statcalls) { statcall.second.start();
         }
@@ -650,5 +687,10 @@ auto IOLoop::query_service(CAvahiService pattern, AvahiLookupFlags flags) -> std
 auto IOLoop::get_register_group() -> std::unique_ptr<AvahiGroup> {
     _impl->create_avahi_handler(this);
     return _impl->avahi->get_register_group();
+}
+
+auto IOLoop::handle_zeroconf() -> error_c {
+    _impl->create_avahi_handler(this);
+    return _impl->handle_zeroconf();
 }
 

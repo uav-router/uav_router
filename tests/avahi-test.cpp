@@ -19,6 +19,11 @@ void print_addr(const struct sockaddr *sa, socklen_t salen) {
 
 void avahi_register() {
     IOLoop loop;
+    error_c ec = loop.handle_CtrlC();
+    if (ec) {
+        std::cout<<"Ctrl-C handler error "<<ec<<std::endl;
+        return;
+    }
     auto group = loop.get_register_group();
     group->on_create([](AvahiGroup* g){ 
         error_c ec = g->add_service(
@@ -76,6 +81,11 @@ error_c get_port_number(addrinfo* ai, uint16_t &port, int &fd) {
 
 void auto_port() {
     IOLoop loop;
+    error_c ec = loop.handle_CtrlC();
+    if (ec) {
+        std::cout<<"Ctrl-C handler error "<<ec<<std::endl;
+        return;
+    }
     std::string itf = "tap0";
     auto resolver = AddressResolver::create();
     resolver->on_resolve([&loop,&itf](addrinfo* ai){
@@ -136,6 +146,11 @@ void auto_port() {
 
 void avahi_browser() {
     IOLoop loop;
+    error_c ec = loop.handle_CtrlC();
+    if (ec) {
+        std::cout<<"Ctrl-C handler error "<<ec<<std::endl;
+        return;
+    }
 
     auto sb = loop.query_service(CAvahiService("anon(.*)","_ipp._tcp").set_ipv4().set_interface("tap0"));
     sb->on_failure([](error_c ec){
