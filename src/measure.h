@@ -34,8 +34,12 @@ class OStat {
 public:
     virtual void send(Metric&& metric) = 0;
     virtual void flush() = 0;
+    virtual void pack_size(int size) = 0; // default: 400
+    virtual void queue_size(int max, int shrink) = 0; // defaults: max = 10000 shrink = 9900
+    virtual void global_tags(std::string values) = 0;
     virtual ~OStat() = default;
 };
+
 
 // Base class to send collected stats
 class Stat {
@@ -81,6 +85,15 @@ public:
     Duration min = Duration::max();
     Duration max = Duration::zero();
     int count = 0;
+};
+
+class StatHandler {
+public:
+    void add_stat_output(std::unique_ptr<OStat> out);
+    void clear_stat_outputs();
+    auto influx_udp(const std::string& host, uint16_t port) -> std::unique_ptr<OStat>;
+    auto stat_influx_file(const std::string& filename) -> std::unique_ptr<OStat>;
+    virtual ~StatHandler() = default;
 };
 
 #endif // _MEASURE_H_
