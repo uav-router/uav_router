@@ -13,7 +13,7 @@
 class SignalImpl : public IOPollable, public Signal {
 public:
     using OnSignalFunc  = std::function<bool(signalfd_siginfo*)>;
-    SignalImpl(Poll* poll):IOPollable("signal"),_poll(poll) {
+    SignalImpl(IOLoopSvc* loop):IOPollable("signal"),_poll(loop->poll()) {
         sigemptyset(&mask);
     }
     ~SignalImpl() override {

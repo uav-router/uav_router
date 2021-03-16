@@ -1,11 +1,15 @@
 #include <memory>
 #include <iostream>
 #include <forward_list>
-#include <csignal>
 
+#include <csignal>
 #include <unistd.h>
 #include <cstring>
+#include <utility>
 
+#include "err.h"
+#include "inc/poll.h"
+#include "inc/udev.h"
 #include "log.h"
 #include "loop.h"
 
@@ -13,8 +17,13 @@
 #include "impl/signal.h"
 #include "impl/timer.h"
 #include "impl/udev.h"
+#include "impl/uart.h"
 
-class IOLoopImpl : public IOLoop, public Poll {
+
+//----------------------------------------
+
+
+class IOLoopImpl : public IOLoopSvc, public Poll {
 public:
     IOLoopImpl(int size): _epoll_events_number(size) {
         on_error([](error_c& ec){ log.error()<<"ioloop"<<ec<<std::endl;} );
@@ -26,7 +35,9 @@ public:
         }
     }
     // loop items
-    //auto uart(const std::string& name) -> std::unique_ptr<UART> override {}
+    auto uart(const std::string& name) -> std::unique_ptr<UART> override {
+        return std::unique_ptr<UART>(new UARTImpl{name,this});
+    }
     //auto service_client(const std::string& name) -> std::unique_ptr<ServiceClient> override {}
     //auto tcp_client(const std::string& name) -> std::unique_ptr<TcpClient> override {}
     //auto udp_client(const std::string& name) -> std::unique_ptr<UdpClient> override {}
@@ -106,7 +117,7 @@ public:
     
     //auto handle_udev() -> error_c override {}
     //auto handle_zeroconf() -> error_c override {}
-    //auto poll() -> Poll* { return this; }
+    auto poll() -> Poll* override { return this; }
     auto add(int fd, uint32_t events, IOPollable* obj) -> errno_c override {
         errno_c ret = _epoll.add(fd, events, obj);
         if (!ret) { _iowatches.push_front(obj);
@@ -143,7 +154,7 @@ public:
     void block_udev() override {
         _block_udev = true;
     }
-    auto udev() -> UdevLoop* {
+    auto udev() -> UdevLoop* override {
         if (_block_udev) return nullptr;
         if (_udev) return _udev.get();
         _udev = std::make_unique<UDevIO>(this);

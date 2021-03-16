@@ -18,8 +18,12 @@ using OnEventFunc = std::function<void()>;
 class Readable : public error_handler {
 public:
     using OnReadFunc  = std::function<void(void*, int)>;
-    virtual void on_read(OnReadFunc func) = 0;
+    void on_read(OnReadFunc func) {_on_read = func;}
     virtual auto get_peer_name() -> const std::string& = 0;
+protected:
+    void on_read(void* buf, int len) { if (_on_read) _on_read(buf, len); }
+private:
+    OnReadFunc _on_read;
 };
 
 class Writeable {
@@ -38,7 +42,7 @@ private:
 class Closeable {
 public:
     virtual ~Closeable() = default;
-    virtual void on_close(OnEventFunc func) = 0;
+    void on_close(OnEventFunc func) {_on_close = func;}
 protected:
     void on_close() { if (_on_close) _on_close(); }
 private:
@@ -50,10 +54,11 @@ class Client : public Readable, public Writeable, public Closeable {
 
 class StreamSource: public error_handler {
 public:
-    using OnConnectFunc  = std::function<void(std::unique_ptr<Client>, std::string)>;
-    virtual void on_connect(OnConnectFunc func) = 0;
+    using OnConnectFunc  = std::function<void(std::shared_ptr<Client>, std::string)>;
+    virtual void on_connect(OnConnectFunc func) { _on_connect = func;
+    }
 protected:
-    void on_connect(std::unique_ptr<Client> cli, std::string name) { 
+    void on_connect(std::shared_ptr<Client> cli, std::string name) { 
         if (_on_connect) _on_connect(std::move(cli), std::move(name)); 
     }
 private:

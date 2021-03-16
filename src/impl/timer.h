@@ -8,7 +8,7 @@
 
 class TimerImpl : public IOPollable, public Timer {
 public:
-    TimerImpl(Poll* poll):IOPollable("timer"),_poll(poll) {}
+    TimerImpl(IOLoopSvc* loop):IOPollable("timer"),_poll(loop->poll()) {}
     ~TimerImpl() override { stop(); }
     auto arm_periodic(std::chrono::nanoseconds timeout) -> error_c override {
         itimerspec ts;

@@ -2,7 +2,7 @@
 #define __UDEV_IMPL__H__
 
 #include <unistd.h>
-#include <forward_list>
+#include <set>
 #include <sys/epoll.h>
 #include <libudev.h> //dnf install systemd-devel; apt-get install libudev-dev
 #include "../loop.h"
@@ -10,7 +10,7 @@
 class UDevIO : public UdevLoop, public IOPollable, public error_handler {
 public:
     using OnActionFunc = std::function<void(udev_device*)>;
-    UDevIO(Poll* loop):IOPollable("udev"),_loop(loop) {
+    UDevIO(IOLoopSvc* loop):IOPollable("udev"),_poll(loop->poll()) {
         _udev = udev_new();
         if (!_udev) {
             _ec = errno_c("udev_new");
@@ -36,7 +36,7 @@ public:
             _ec = errno_c("udev_monitor_get_fd");
             return;
         }
-        _ec = loop->add(_fd, EPOLLIN, this);
+        _ec = _poll->add(_fd, EPOLLIN, this);
     }
     auto get_ec() -> error_c& { return _ec; }
 
@@ -161,10 +161,10 @@ public:
     }
 
     void start_watch(UdevPollable* obj) override {
-        udev_watches.push_front(obj);
+        udev_watches.insert(obj);
     }
     void stop_watch(UdevPollable* obj) override {
-        udev_watches.remove(obj);
+        udev_watches.erase(obj);
     }
 
 
@@ -172,8 +172,8 @@ private:
     udev *_udev = nullptr;
     udev_monitor *_mon = nullptr;
     int _fd = -1;
-    std::forward_list<UdevPollable*> udev_watches;
-    Poll* _loop;
+    std::set<UdevPollable*> udev_watches;
+    Poll* _poll;
     error_c _ec;
 };
 

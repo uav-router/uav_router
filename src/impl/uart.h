@@ -1,37 +1,32 @@
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-#include <strings.h>
-#include <cstring>
-#include <sys/ioctl.h>
-#include <sys/epoll.h>
+#ifndef __UART_IMPL_H__
+#define __UART_IMPL_H__
 #include <unistd.h>
 #include <termios.h>
 #include <linux/serial.h>
+#include <sys/ioctl.h>
+#include <fcntl.h>
+#include <sys/epoll.h>
 
 #include <map>
 #include <chrono>
-#include <cerrno>
-#include <utility>
 using namespace std::chrono_literals;
 
-#include "err.h"
-#include "log.h"
-#include "loop.h"
-#include "uart.h"
-#include "timer.h"
-static Log::Log log("uart");
+#include "../err.h"
+#include "../loop.h"
+#include "../log.h"
+
 struct FD {
     int* _fd;
     FD(int& fd): _fd(&fd) {}
     ~FD() {
         if (_fd && *_fd!=-1) {
             close(*_fd);
-            *_fd = 1;
+            *_fd = -1;
         }
     }
     void clear() {_fd=nullptr;}
 };
+
 
 std::map<int, speed_t> bauds = {
     {0,      B0},
@@ -67,55 +62,91 @@ std::map<int, speed_t> bauds = {
     {4000000,B4000000}
 };
 
-
-class UARTImpl: public IOPollable, public UART {
+class USBClient: public Client {
 public:
-    UARTImpl(std::string name): IOPollable("uart"), _name(std::move(name)) {}
-    
-    void init(const std::string& path, IOLoop* loop, int baudrate, bool flow_control) override {
+    USBClient(const std::string& name, int fd):_name(name), _fd(fd) {}
+    auto write(const void* buf, int len) -> int override {
+        if (!_is_writeable) return 0;
+        ssize_t n = ::write(_fd, buf, len);
+        _is_writeable = n==len;
+        if (n==-1) {
+            errno_c ret;
+            if (ret != std::error_condition(std::errc::resource_unavailable_try_again)) {
+                on_error(ret, "uart write");
+            }
+        }
+        return n;
+    }
+    auto get_peer_name() -> const std::string& override {
+        return _name;
+    }
+
+    const std::string& _name;
+    int _fd;
+
+    friend class UARTImpl;
+
+};
+
+class UARTImpl : public UART, public IOPollable, public UdevPollable {
+public:
+    UARTImpl(std::string name, IOLoopSvc* loop): IOPollable("uart"), _name(std::move(name)), _poll(loop->poll()), _udev(loop->udev()) {
+        _timer = loop->timer();
+        _timer->shoot([this]() { init_uart_retry(); });
+    }
+    ~UARTImpl() override {
+        if (_fd != -1) { _poll->del(_fd, this);
+        }
+        cleanup();
+    }
+    auto init(const std::string& path, int baudrate=115200, bool flow_control=false) -> error_c override {
         _path = path;
         _baudrate = baudrate;
         _flow_control = flow_control;
-        _loop = loop;
         auto on_err = [this](error_c& ec){ on_error(ec,_name);};
-        _timer.on_error(on_err);
+        _timer->on_error(on_err);
         init_uart_retry();
+        return error_c();
     }
 
     void init_uart_retry() {
         error_c ret = init_uart();
         if (on_error(ret,"init_uart")) {
-            if (!_usb_id.empty() && ret == std::error_condition(std::errc::no_such_device)) return;
-            ret = _timer.start_with(_loop);
-            if (on_error(ret,"recreate timer")) return;
-            ret = _timer.arm_oneshoot(5s);
-            if (on_error(ret,"rearm timer")) return;
-            _timer.on_shoot_func([this]() { init_uart_retry(); });
+            if (!_usb_id.empty() && ret == std::error_condition(std::errc::no_such_device)) {
+                return;
+            }
+            ret = _timer->arm_oneshoot(5s);
+            on_error(ret,"rearm timer");
             return;
         }
-        ret = _loop->add(_fd, EPOLLIN | EPOLLOUT | EPOLLET, this);
+        ret = _poll->add(_fd, EPOLLIN | EPOLLOUT | EPOLLET, this);
         on_error(ret,"uart loop add");
     }
 
     auto init_uart() -> error_c {
-        if (_fd!=-1) close(_fd);
+        if (_fd!=-1) { 
+            close(_fd);
+            _fd = -1;
+        }
         FD watcher(_fd);
-        if (_usb_id.empty()) {
-            if (_path.rfind("/dev/serial/by-id/",0)==0) {
-                _usb_id = _path;
-                _path.clear();
-            } else {
-                _usb_id = _loop->udev_find_id(_path);
+        if (_udev) {
+            if (_usb_id.empty()) {
+                if (_path.rfind("/dev/serial/by-id/",0)==0) {
+                    _usb_id = _path;
+                    _path.clear();
+                } else {
+                    _usb_id = _udev->find_id(_path);
+                }
+                if (!_usb_id.empty()) {
+                    log.debug()<<"USB port "<<_usb_id<<" detected"<<std::endl;
+                    _udev->start_watch(this);
+                }
             }
             if (!_usb_id.empty()) {
-                log.debug()<<"USB port "<<_usb_id<<" detected"<<std::endl;
-                _loop->udev_start_watch(this);
+                auto found = _udev->find_path(_usb_id);
+                if (found.empty()) return errno_c(ENODEV,_usb_id+" not found");
+                _path = found;
             }
-        }
-        if (!_usb_id.empty()) {
-            auto found = _loop->udev_find_path(_usb_id);
-            if (found.empty()) return errno_c(ENODEV,_usb_id+" not found");
-            _path = found;
         }
         _fd = ::open(_path.c_str(), O_RDWR|O_NONBLOCK|O_CLOEXEC|O_NOCTTY);
         if (_fd == -1) { return errno_c("uart "+_path+" open");
@@ -170,9 +201,10 @@ public:
     }
 
     auto epollIN() -> int override {
-        while(true) {
+        int n = 1024;
+        while(n==1024) {
             std::array<char,1024> buffer;
-            int n = read(_fd, buffer.data(), buffer.size());
+            n = read(_fd, buffer.data(), buffer.size());
             if (n == -1) {
                 errno_c ret;
                 if (ret != std::error_condition(std::errc::resource_unavailable_try_again)) {
@@ -181,17 +213,16 @@ public:
                 break;
             }
             if (n==0) {
-                //log.warning()<<"UART read returns 0 bytes"<<std::endl;
+                log.warning()<<"UART read returns 0 bytes"<<std::endl;
                 break;
             }
-            if (_on_read) _on_read(buffer.data(), n);
+            if (auto client = cli()) client->on_read(buffer.data(), n);
         }
         return HANDLED;
     }
 
     auto epollOUT() -> int override {
-        _is_writeable = true;
-        write_allowed();
+        if (auto client = cli()) client->writeable();
         return HANDLED;
     }
 
@@ -202,46 +233,43 @@ public:
 
     auto epollHUP() -> int override {
         if (_fd != -1) {
-            _loop->del(_fd, this);
-            close(_fd);
-            _fd = -1;
-            init_uart_retry();
+            _poll->del(_fd, this);
         }
+        cleanup(false);
+        if (_usb_id.empty()) init_uart_retry();
         return HANDLED;
     }
 
-    auto start_with(IOLoop* loop) -> error_c override {
-        _loop = loop;
-        init_uart_retry();
-        return error_c();
-    }
-
-    void cleanup() override {
+    void cleanup(bool with_udev) {
+        if (!_client.expired()) {
+            if (auto client = cli()) client->on_close();
+        }
         if (_fd != -1) {
             close(_fd);
-        }
-        if (!_usb_id.empty()) { _loop->udev_stop_watch(this);
+            _fd = -1;
+            if (!_usb_id.empty() && with_udev) _udev->stop_watch(this);
         }
     }
-    auto write(const void* buf, int len) -> int override {
-        if (!_is_writeable) return 0;
-        ssize_t n = ::write(_fd, buf, len);
-        _is_writeable = n==len;
-        if (n==-1) {
-            errno_c ret;
-            if (ret != std::error_condition(std::errc::resource_unavailable_try_again)) {
-                on_error(ret, "uart write");
+    void cleanup() override {
+        cleanup(true);
+    }
+
+    auto cli() -> std::shared_ptr<USBClient> {
+        std::shared_ptr<USBClient> ret;
+        if (!_client.expired()) { 
+            ret = _client.lock();
+        }
+        if (!ret) {
+            if (_usb_id.empty()) {
+                ret = std::make_shared<USBClient>(_path,_fd);
+            } else {
+                ret = std::make_shared<USBClient>(_usb_id,_fd);
             }
+            ret->on_error([this](error_c ec){on_error(ec);});
+            _client = ret;
+            on_connect(ret, ret->get_peer_name());
         }
-        return n;
-    }
-    void on_read(OnReadFunc func) override { _on_read=func;
-    }
-
-    void on_connect(OnEventFunc func) override { _on_connect=func;
-    }
-
-    void on_close(OnEventFunc func) override { _on_close=func;
+        return ret;
     }
 
     void udev_add(const std::string& node, const std::string& id) override {
@@ -253,29 +281,27 @@ public:
     void udev_remove(const std::string& node, const std::string& id) override {
         if (id==_usb_id) {
             log.debug()<<"Device "<<_usb_id<<" removed"<<std::endl;
-            if (_fd != -1) { 
-                _loop->del(_fd, this);
-                close(_fd);
-                _fd = -1;
+            if (_fd!=-1) { _poll->del(_fd,this);
             }
+            cleanup(false);
         }
     }
-    
-private:
+
+
+
     std::string _name;
     std::string _path;
     std::string _usb_id;
-    speed_t _baudrate = B115200;
-    bool _is_writeable = false;
+    int _baudrate = 115200;
     bool _flow_control = false;
-    IOLoop* _loop;
-    Timer _timer;
-    int _fd;
-    OnReadFunc _on_read;
-    OnEventFunc _on_close;
-    OnEventFunc _on_connect;
+
+    int _fd = -1;
+    std::weak_ptr<USBClient> _client;
+
+    Poll* _poll;
+    UdevLoop* _udev;
+    std::unique_ptr<Timer> _timer;
+    inline static Log::Log log {"uart"};
 };
 
-auto UART::create(const std::string& name) -> std::unique_ptr<UART> {
-    return std::unique_ptr<UART>{new UARTImpl(name)};
-}
+#endif  //!__UART_IMPL_H__
