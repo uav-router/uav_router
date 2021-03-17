@@ -22,26 +22,26 @@ struct CAvahiService {
     CAvahiService() = default;
     CAvahiService(std::string n, std::string t, std::string d = std::string(), AvahiIfIndex i = AVAHI_IF_UNSPEC, AvahiProtocol p = AVAHI_PROTO_UNSPEC) : 
         interface(i), protocol(p), name(std::move(n)), type(std::move(t)), domain(std::move(d)) {}
-    auto set_type(std::string t) -> CAvahiService&& {
+    auto set_type(std::string t) -> CAvahiService& {
         type = std::move(t);
-        return std::move(*this);
+        return *this;
     }
-    auto set_ipv4() -> CAvahiService&& {
+    auto ipv4() -> CAvahiService& {
         protocol = AVAHI_PROTO_INET;
-        return std::move(*this);
+        return *this;
     }
-    auto set_ipv6() -> CAvahiService&& {
+    auto ipv6() -> CAvahiService& {
         protocol = AVAHI_PROTO_INET6;
-        return std::move(*this);
+        return *this;
     }
-    auto set_interface(std::string if_name) -> CAvahiService&& {
+    auto itf(std::string if_name) -> CAvahiService& {
         if (!if_name.empty()) {
             auto if_ = if_nametoindex(if_name.c_str());
             if (if_) interface = if_;
         }
-        return std::move(*this);
+        return *this;
     }
-    auto get_interface() -> std::string {
+    auto itf() -> std::string {
         return if_indextoname(interface,(char*)alloca(IF_NAMESIZE));
     }
 };

@@ -18,10 +18,25 @@
 #include "impl/timer.h"
 #include "impl/udev.h"
 #include "impl/uart.h"
-
+#include "impl/avahi-poll.h"
 
 //----------------------------------------
 
+class AvahiImpl : public Avahi {
+public:
+    AvahiImpl(IOLoopSvc* loop) {
+        create_avahi_poll(loop, avahi_poll);
+        handler = AvahiHandler::create(&avahi_poll);
+    }
+    auto query_service(CAvahiService pattern, AvahiLookupFlags flags=(AvahiLookupFlags)0) -> std::unique_ptr<AvahiQuery> override {
+        return handler->query_service(pattern, flags);
+    }
+    auto get_register_group() -> std::unique_ptr<AvahiGroup> override {
+        return handler->get_register_group();
+    }
+    std::unique_ptr<AvahiHandler> handler;
+    AvahiPoll avahi_poll;
+};
 
 class IOLoopImpl : public IOLoopSvc, public Poll {
 public:
@@ -165,15 +180,27 @@ public:
         _udev->on_error([this](error_c ec){ on_error(ec);});
         return _udev.get();
     }
-    
+
+    void block_zeroconf() override {
+        _block_zeroconf = true;
+    }
+
+    auto zeroconf() -> Avahi* override {
+        if (_block_zeroconf) return nullptr;
+        if (_zeroconf) return _zeroconf.get();
+        _zeroconf = std::make_unique<AvahiImpl>(this);
+        return _zeroconf.get();
+    }
 
     Epoll _epoll;
     int _epoll_events_number;
     bool _loop_stop = false;
     bool _block_udev = false;
+    bool _block_zeroconf = false;
     std::forward_list<IOPollable*> _iowatches;
     std::unique_ptr<Signal> ctrlC_handler;
     std::unique_ptr<UDevIO> _udev;
+    std::unique_ptr<AvahiImpl> _zeroconf;
     inline static Log::Log log {"ioloop"};
 };
 
@@ -181,3 +208,6 @@ auto IOLoop::loop(int pool_events) -> std::unique_ptr<IOLoop> {
     return std::make_unique<IOLoopImpl>(pool_events);
 }
 
+auto IOLoopSvc::loop(int pool_events) -> std::unique_ptr<IOLoopSvc> {
+    return std::make_unique<IOLoopImpl>(pool_events);
+}

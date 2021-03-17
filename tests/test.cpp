@@ -4,16 +4,6 @@ using namespace std::chrono_literals;
 #include "log.h"
 #include "ioloop.h"
 
-void test() {
-    auto loop = IOLoop::loop();
-    error_c ec = loop->handle_CtrlC();
-    if (ec) {
-        std::cout<<"Ctrl-C handler error "<<ec<<std::endl;
-        return;
-    }
-    loop->run();
-}
-
 void test_timer() {
     auto loop = IOLoop::loop();
     error_c ec = loop->handle_CtrlC();
@@ -32,6 +22,17 @@ void test_timer() {
     }
     loop->run();
 }
+
+void test() {
+    auto loop = IOLoop::loop();
+    error_c ec = loop->handle_CtrlC();
+    if (ec) {
+        std::cout<<"Ctrl-C handler error "<<ec<<std::endl;
+        return;
+    }
+    loop->run();
+}
+
 
 int main() {
     Log::init();

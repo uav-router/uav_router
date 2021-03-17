@@ -6,11 +6,10 @@
 #include "measure.h"
 
 #include "inc/endpoints.h"
-#include "inc/poll.h"
-#include "inc/udev.h"
 #include "inc/timer.h"
 #include "inc/signal.h"
 
+// ---------------------------------
 class IOLoop  : public error_handler {
 public:
     // loop items
@@ -24,7 +23,7 @@ public:
     virtual auto timer() -> std::unique_ptr<Timer> = 0;
     
     virtual void block_udev() = 0;
-    //virtual auto udev() -> UdevLoop* = 0;
+    virtual void block_zeroconf() = 0;
     
     // stats
     //virtual auto stats() -> StatHandler& = 0;
