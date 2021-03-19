@@ -2,9 +2,6 @@
 #include <sstream>
 #include <linux/if_link.h>
 #include <arpa/inet.h>
-#include <ifaddrs.h>
-#include <net/if.h>
-#include <sys/socket.h>
 #include "sockaddr.h"
 
 class SockAddr::SockAddrImpl {
@@ -104,54 +101,21 @@ void SockAddr::init(in_addr_t address, uint16_t port) {
     _impl->addr.in.sin_port = htons(port);
     _impl->length = sizeof(sockaddr_in);
 }
-
-void SockAddr::init(in6_addr address, uint16_t port) {
-    if (!_impl) _impl = std::make_unique<SockAddrImpl>();
-    _impl->addr.in6.sin6_family = AF_INET6;
-    _impl->addr.in6.sin6_flowinfo = 0;
-    _impl->addr.in6.sin6_port = htons(port);
-    _impl->addr.in6.sin6_addr = address;
-    _impl->length = sizeof(sockaddr_in6);
-}
-
-auto SockAddr::init(const std::string& address, uint16_t port) -> bool {
-    if (!_impl) _impl = std::make_unique<SockAddrImpl>();
+SockAddr::SockAddr(const std::string& address, uint16_t port):_impl{new SockAddrImpl{}} {
     _impl->length = 0;
-    if (address.empty()) {
-        init(INADDR_ANY,port);
-        return true;
-    }
-    if (address=="<loopback>") {
-        init(INADDR_LOOPBACK,port);
-        return true;
-    }
-    if (address=="<broadcast>") {
-        init(INADDR_BROADCAST,port);
-        return true;
-    }
-    if (address=="<any6>") {
-        init(in6addr_any,port);
-        return true;
-    }
-    if (address=="<loopback6>") {
-        init(in6addr_loopback,port);
-        return true;
-    }
     int ret = inet_pton(AF_INET,address.c_str(),&_impl->addr.in.sin_addr);
     if (ret) {
         _impl->length = sizeof(sockaddr_in);
         _impl->addr.in.sin_family = AF_INET;
         _impl->addr.in.sin_port = htons(port);
-        return true;
+        return;
     }
     ret = inet_pton(AF_INET6,address.c_str(),&_impl->addr.in6.sin6_addr);
     if (ret) {
         _impl->length = sizeof(sockaddr_in6);
         _impl->addr.in6.sin6_family = AF_INET6;
         _impl->addr.in6.sin6_port = htons(port);
-        return true;
     }
-    return false;
 }
 
 auto SockAddr::sock_addr() -> struct sockaddr* {
@@ -272,64 +236,4 @@ auto operator<<(std::ostream &os, const SockAddr &addr) -> std::ostream& {
         }
     }
     return os;
-}
-
-auto SockAddrList::current() -> SockAddr& {
-    if (_current==end()) _current = begin();
-    return *_current;
-}
-auto SockAddrList::next() -> SockAddr& {
-    if (_current==end()) { _current = begin(); return *_current;
-    }
-    _current++;
-    if (_current==end()) _current = begin();
-    return *_current;
-}
-void SockAddrList::add(const SockAddr& addr) {
-    push_front(addr);
-    _current = begin();
-}
-void SockAddrList::add(SockAddr&& addr) {
-    push_front(addr);
-    _current = begin();
-}
-
-auto SockAddrList::interface(const std::string& name, uint16_t port, int family) -> error_c {
-    ifaddrs *ifaddr;
-    clear();
-    error_c ret = err_chk(getifaddrs(&ifaddr),"getifaddrs");
-    if (ret) return ret;
-    for (ifaddrs *ifa = ifaddr; ifa != nullptr; ifa = ifa->ifa_next) {
-        if (family!=AF_UNSPEC && ifa->ifa_addr->sa_family!=family) continue;
-        if (ifa->ifa_addr->sa_family != AF_INET) continue;
-        if (ifa->ifa_addr->sa_family != AF_INET6) continue;
-        if (ifa->ifa_addr == nullptr) continue;
-        if (name==std::string(ifa->ifa_name)) {
-            add(SockAddr(ifa->ifa_addr,ifa->ifa_addr->sa_family == AF_INET ? sizeof(sockaddr_in):sizeof(sockaddr_in6)));
-        }
-    }
-    freeifaddrs(ifaddr);
-    return empty()?error_c(ENODATA):error_c();
-}
-
-auto SockAddrList::broadcast(const std::string& name, uint16_t port) -> error_c {
-    ifaddrs *ifaddr;
-    clear();
-    error_c ret = err_chk(getifaddrs(&ifaddr),"getifaddrs");
-    if (ret) return ret;
-    for (ifaddrs *ifa = ifaddr; ifa != nullptr; ifa = ifa->ifa_next) {
-        if (ifa->ifa_addr->sa_family != AF_INET) continue;
-        if (!(ifa->ifa_flags | IFF_BROADCAST)) continue;
-        if (ifa->ifa_addr == nullptr) continue;
-        if (name==std::string(ifa->ifa_name)) {
-            add(SockAddr(ifa->ifa_broadaddr,sizeof(sockaddr_in)));
-        }
-    }
-    freeifaddrs(ifaddr);
-    return empty()?error_c(ENODATA):error_c();
-}
-
-SockAddrList::SockAddrList(addrinfo *ai) {
-    for(;ai;ai=ai->ai_next) { add(SockAddr(ai));
-    }
 }

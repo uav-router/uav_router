@@ -4,7 +4,6 @@
 #include <memory>
 #include <unistd.h>
 #include <iostream>
-#include <forward_list>
 #include <avahi-common/address.h>
 #include "err.h"
 
@@ -25,9 +24,8 @@ public:
   
   SockAddr(in_addr_t address, uint16_t port);
   void init(in_addr_t address, uint16_t port);
-  void init(in6_addr address, uint16_t port);
   
-  auto init(const std::string& address, uint16_t port) -> bool;
+  SockAddr(const std::string& address, uint16_t port);
   
   SockAddr(int fd);
   void init(int fd);
@@ -45,8 +43,7 @@ public:
   auto is_any() -> bool;
   
   auto ip4_addr_t() -> in_addr_t;
-  
-  auto port() -> uint16_t;
+              auto port() -> uint16_t;
   void set_port(uint16_t port);
   
   auto bind(int fd) ->error_c;
@@ -69,19 +66,5 @@ private:
 
 auto operator<(const SockAddr& addr1, const SockAddr& addr2) -> bool;
 auto operator<<(std::ostream &os, const SockAddr &addr) -> std::ostream&;
-
-class SockAddrList : public std::forward_list<SockAddr> {
-public:
-    SockAddrList() = default;
-    SockAddrList(addrinfo *ai);
-    auto current() -> SockAddr&;
-    auto next() -> SockAddr&;
-    void add(const SockAddr& addr);
-    void add(SockAddr&& addr);
-    auto interface(const std::string& name, uint16_t port, int family = AF_UNSPEC) -> error_c;
-    auto broadcast(const std::string& name, uint16_t port) -> error_c;
-private:
-    iterator _current = end();
-};
 
 #endif  // __SOCKADDR_H__

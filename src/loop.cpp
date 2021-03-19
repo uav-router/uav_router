@@ -18,25 +18,12 @@
 #include "impl/timer.h"
 #include "impl/udev.h"
 #include "impl/uart.h"
-#include "impl/avahi-poll.h"
+#include "impl/zeroconf.h"
+#include "impl/address.h"
+
 
 //----------------------------------------
 
-class AvahiImpl : public Avahi {
-public:
-    AvahiImpl(IOLoopSvc* loop) {
-        create_avahi_poll(loop, avahi_poll);
-        handler = AvahiHandler::create(&avahi_poll);
-    }
-    auto query_service(CAvahiService pattern, AvahiLookupFlags flags=(AvahiLookupFlags)0) -> std::unique_ptr<AvahiQuery> override {
-        return handler->query_service(pattern, flags);
-    }
-    auto get_register_group() -> std::unique_ptr<AvahiGroup> override {
-        return handler->get_register_group();
-    }
-    std::unique_ptr<AvahiHandler> handler;
-    AvahiPoll avahi_poll;
-};
 
 class IOLoopImpl : public IOLoopSvc, public Poll {
 public:
@@ -150,10 +137,14 @@ public:
     }
 
     auto signal_handler() -> std::unique_ptr<Signal> override {
-        return std::unique_ptr<Signal>(new SignalImpl{this});
+      return std::unique_ptr<Signal>(new SignalImpl{this});
     }
     auto timer() -> std::unique_ptr<Timer> override {
-        return std::unique_ptr<Timer>(new TimerImpl{this});
+      return std::unique_ptr<Timer>(new TimerImpl{this});
+    }
+
+    auto address() -> std::unique_ptr<AddressResolver> override {
+        return std::make_unique<AddressResolverImpl>(this);
     }
 
     auto handle_CtrlC() -> error_c override {
