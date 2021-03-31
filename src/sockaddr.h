@@ -27,7 +27,7 @@ public:
   void init(in_addr_t address, uint16_t port);
   void init(in6_addr address, uint16_t port);
   
-  auto init(const std::string& address, uint16_t port) -> bool;
+  auto init(const std::string& address, uint16_t port = 0) -> bool;
   
   SockAddr(int fd);
   void init(int fd);
@@ -43,6 +43,7 @@ public:
   
   auto is_ip4() -> bool;
   auto is_any() -> bool;
+  auto family() -> int;
   
   auto ip4_addr_t() -> in_addr_t;
   
@@ -51,6 +52,7 @@ public:
   
   auto bind(int fd) ->error_c;
   auto connect(int fd) ->error_c;
+  auto to_avahi(AvahiAddress& addr) -> bool;
 
   auto operator=(const SockAddr &other) -> SockAddr &;
   auto operator=(SockAddr &&other) noexcept -> SockAddr &;
@@ -59,6 +61,8 @@ public:
     IPADDR_ONLY
   };
   auto format(Format f) -> std::string;
+
+  static auto any(int family, uint16_t port = 0) -> SockAddr;
   friend auto operator<<(std::ostream &os, const SockAddr &addr) -> std::ostream&;
   friend auto operator<(const SockAddr& addr1, const SockAddr& addr2) -> bool;
 

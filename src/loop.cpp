@@ -20,10 +20,10 @@
 #include "impl/uart.h"
 #include "impl/zeroconf.h"
 #include "impl/address.h"
+#include "impl/tcpcli.h"
 
 
 //----------------------------------------
-
 
 class IOLoopImpl : public IOLoopSvc, public Poll {
 public:
@@ -38,10 +38,12 @@ public:
     }
     // loop items
     auto uart(const std::string& name) -> std::unique_ptr<UART> override {
-        return std::unique_ptr<UART>(new UARTImpl{name,this});
+        return std::make_unique<UARTImpl>(name,this);
     }
     //auto service_client(const std::string& name) -> std::unique_ptr<ServiceClient> override {}
-    //auto tcp_client(const std::string& name) -> std::unique_ptr<TcpClient> override {}
+    auto tcp_client(const std::string& name) -> std::unique_ptr<TcpClient> override {
+        return std::make_unique<TcpClientImpl>(name,this);
+    }
     //auto udp_client(const std::string& name) -> std::unique_ptr<UdpClient> override {}
     //auto tcp_server(const std::string& name) -> std::unique_ptr<TcpServer> override {}
     //auto udp_server(const std::string& name) -> std::unique_ptr<UdpServer> override {}

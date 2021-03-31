@@ -15,18 +15,7 @@ using namespace std::chrono_literals;
 #include "../loop.h"
 #include "../log.h"
 
-struct FD {
-    int* _fd;
-    FD(int& fd): _fd(&fd) {}
-    ~FD() {
-        if (_fd && *_fd!=-1) {
-            close(*_fd);
-            *_fd = -1;
-        }
-    }
-    void clear() {_fd=nullptr;}
-};
-
+#include "fd.h"
 
 std::map<int, speed_t> bauds = {
     {0,      B0},
@@ -62,9 +51,9 @@ std::map<int, speed_t> bauds = {
     {4000000,B4000000}
 };
 
-class USBClient: public Client {
+class UARTClient: public Client {
 public:
-    USBClient(const std::string& name, int fd):_name(name), _fd(fd) {}
+    UARTClient(const std::string& name, int fd):_name(name), _fd(fd) {}
     auto write(const void* buf, int len) -> int override {
         if (!_is_writeable) return 0;
         ssize_t n = ::write(_fd, buf, len);
@@ -254,16 +243,16 @@ public:
         cleanup(true);
     }
 
-    auto cli() -> std::shared_ptr<USBClient> {
-        std::shared_ptr<USBClient> ret;
+    auto cli() -> std::shared_ptr<UARTClient> {
+        std::shared_ptr<UARTClient> ret;
         if (!_client.expired()) { 
             ret = _client.lock();
         }
         if (!ret) {
             if (_usb_id.empty()) {
-                ret = std::make_shared<USBClient>(_path,_fd);
+                ret = std::make_shared<UARTClient>(_path,_fd);
             } else {
-                ret = std::make_shared<USBClient>(_usb_id,_fd);
+                ret = std::make_shared<UARTClient>(_usb_id,_fd);
             }
             ret->on_error([this](error_c ec){on_error(ec);});
             _client = ret;
@@ -296,7 +285,7 @@ public:
     bool _flow_control = false;
 
     int _fd = -1;
-    std::weak_ptr<USBClient> _client;
+    std::weak_ptr<UARTClient> _client;
 
     Poll* _poll;
     UdevLoop* _udev;

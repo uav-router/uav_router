@@ -139,6 +139,10 @@ private:
 class AddressResolverImpl : public AddressResolver {
 public:
     AddressResolverImpl(IOLoopSvc *loop):_ai(loop),_timer(loop->timer()) {
+        _timer->shoot([this]() { requery(); });
+        _ai.on_result([this](addrinfo* ai, std::error_code& ec){
+            on_addrinfo(ai,ec);
+        });
     }
 
     auto init(const std::string& host, uint16_t port, OnResolveFunc handler) -> error_c override {
@@ -148,20 +152,19 @@ public:
         auto on_err = [this](error_c& ec){ on_error(ec,"address resolver");};
         _ai.on_error(on_err);
         _timer->on_error(on_err);
-        return start_address_resolving();
+        return requery();
     }
-    auto start_address_resolving() -> error_c {
-        error_c ret = _ai.on_result([this](addrinfo* ai, std::error_code& ec){
-            on_addrinfo(ai,ec);
-        }).init(_host,std::to_string(_port),AF_INET,SOCK_DGRAM,IPPROTO_UDP);
+
+    auto requery() -> error_c override {
+        error_c ret = _ai.init(_host,std::to_string(_port),AF_INET,SOCK_DGRAM,IPPROTO_UDP, AI_V4MAPPED | AI_ADDRCONFIG | AI_CANONNAME);
         if (on_error(ret,"address_resolving")) return ret;
         return error_c();
     }
-
+    
     void on_addrinfo(addrinfo* ai, std::error_code& ec) {
         error_c err(ec.value(),ec.category());
         if (on_error(err,"addrinfo")) {
-            error_c ret = _timer->shoot([this]() { start_address_resolving(); }).arm_oneshoot(5s);
+            error_c ret = _timer->arm_oneshoot(5s);
             on_error(ret,"arm timer");
             return;
         }

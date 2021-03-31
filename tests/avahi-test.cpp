@@ -74,11 +74,31 @@ void register_service() {
     loop->run();
 }
 
+void host_name() {
+    auto loop = IOLoopSvc::loop();
+    error_c ec = loop->handle_CtrlC();
+    if (ec) {
+        std::cout<<"Ctrl-C handler error "<<ec<<std::endl;
+        return;
+    }
+    SockAddr addr;
+    addr.init("192.168.0.101");
+    std::cout<<"Query address: "<<addr<<std::endl;
+    auto group = loop->zeroconf()->query_host_name(addr,[](const std::string& name) {
+        if (name.empty()) {
+            std::cout<<"Name is empty"<<std::endl;
+        } else {
+            std::cout<<"Name is: "<<name<<std::endl;
+        }
+    });
+    loop->run();
+}
 
 int main() {
     Log::init();
     //Log::set_level(Log::Level::DEBUG,{"ioloop"});
-    browser();
+    //browser();
     //register_service();
+    host_name();
     return 0;
 }

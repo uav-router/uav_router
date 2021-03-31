@@ -94,8 +94,10 @@ public:
 
 class AvahiHandler {
 public:
+    using OnHostName = std::function<void(const std::string&)>;
     virtual ~AvahiHandler() = default;
     virtual auto query_service(CAvahiService pattern, AvahiLookupFlags flags=(AvahiLookupFlags)0) -> std::unique_ptr<AvahiQuery> = 0;
+    virtual auto query_host_name(SockAddr& addr, OnHostName callback, AvahiLookupFlags flags=(AvahiLookupFlags)0) -> error_c = 0;
     virtual auto get_register_group() -> std::unique_ptr<AvahiGroup> = 0;
     static auto create(const AvahiPoll* poll, AvahiClientFlags flags = (AvahiClientFlags)0) -> std::unique_ptr<AvahiHandler>;
 };

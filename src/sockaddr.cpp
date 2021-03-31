@@ -1,3 +1,4 @@
+#include <avahi-common/address.h>
 #include <cstring>
 #include <sstream>
 #include <linux/if_link.h>
@@ -5,6 +6,7 @@
 #include <ifaddrs.h>
 #include <net/if.h>
 #include <sys/socket.h>
+#include "log.h"
 #include "sockaddr.h"
 
 class SockAddr::SockAddrImpl {
@@ -53,7 +55,12 @@ public:
 SockAddr::SockAddr() = default;
 SockAddr::~SockAddr() = default;
 SockAddr::SockAddr(struct sockaddr* addr, socklen_t len):_impl{new SockAddrImpl{addr,len}} {}
-SockAddr::SockAddr(addrinfo* ai):_impl{new SockAddrImpl{ai->ai_addr,ai->ai_addrlen}} {}
+SockAddr::SockAddr(addrinfo* ai):_impl{new SockAddrImpl{ai->ai_addr,ai->ai_addrlen}} {
+    if (ai->ai_canonname) { Log::debug()<<ai->ai_canonname<<std::endl;
+    } else {
+        Log::debug()<<"Empty canonname"<<std::endl;
+    }
+}
 SockAddr::SockAddr(SockAddr&& addr):_impl(std::move(addr._impl)) {}
 SockAddr::SockAddr(in_addr_t address, uint16_t port):_impl{new SockAddrImpl{}} {
     _impl->addr.in.sin_family    = AF_INET;
@@ -174,6 +181,11 @@ auto SockAddr::is_ip4() -> bool {
     return _impl->addr.storage.ss_family==AF_INET;
 }
 
+auto SockAddr::family() -> int {
+    if (!_impl) return AF_UNSPEC;
+    return _impl->addr.storage.ss_family;
+}
+
 auto SockAddr::is_any() -> bool {
     if (!_impl) return false;
     return _impl->addr.storage.ss_family==AF_INET && _impl->addr.in.sin_addr.s_addr==htonl(INADDR_ANY);
@@ -216,10 +228,30 @@ auto SockAddr::connect(int fd) ->error_c {
     return err_chk(::connect(fd,(sockaddr*)&(_impl->addr.storage),_impl->length),"bind");
 }
 
+auto SockAddr::to_avahi(AvahiAddress& addr) -> bool {
+    if (!_impl) return false;
+    addr.proto = avahi_af_to_proto(_impl->addr.storage.ss_family);
+    if (addr.proto == AVAHI_PROTO_UNSPEC) return false;
+    if (addr.proto == AVAHI_PROTO_INET) {
+        addr.data.ipv4.address = _impl->addr.in.sin_addr.s_addr;
+    } else {
+        memcpy(addr.data.ipv6.address, _impl->addr.in6.sin6_addr.__in6_u.__u6_addr8,sizeof(addr.data.ipv6.address));
+    }
+    return true;
+}
+
 auto SockAddr::operator=(SockAddr&& other) noexcept -> SockAddr& {
     if (this != &other) { _impl = std::move(other._impl);
     }
     return *this;
+}
+
+auto SockAddr::any(int family, uint16_t port) -> SockAddr {
+    SockAddr addr;
+    if (family==AF_INET) {         addr.init(INADDR_ANY, port);
+    } else if (family==AF_INET6) { addr.init(in6addr_any,port);
+    }
+    return addr;
 }
 
 auto operator<(const SockAddr& addr1, const SockAddr& addr2) -> bool {
@@ -330,6 +362,7 @@ auto SockAddrList::broadcast(const std::string& name, uint16_t port) -> error_c 
 }
 
 SockAddrList::SockAddrList(addrinfo *ai) {
+    Log::debug()<<"ai constructor"<<std::endl;
     for(;ai;ai=ai->ai_next) { add(SockAddr(ai));
     }
 }

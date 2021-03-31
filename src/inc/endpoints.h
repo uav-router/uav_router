@@ -90,7 +90,8 @@ public:
 class TcpServer:  public StreamSource {
 public:
     virtual auto init(uint16_t port) -> error_c = 0;
-    virtual auto init_service(const std::string& service_name) -> error_c = 0;
+    virtual auto service() -> error_c = 0;
+    
     virtual auto address(const std::string& address) -> TcpServer& = 0;
     virtual auto interface(const std::string& address) -> TcpServer& = 0;
 };

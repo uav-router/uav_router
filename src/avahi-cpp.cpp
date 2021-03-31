@@ -1,3 +1,4 @@
+#include <avahi-common/address.h>
 #include <forward_list>
 #include <cstring>
 #include <memory>
@@ -60,6 +61,39 @@ private:
     std::string _host_name;
 };
 
+class CAvahiAddressResolver {
+public:
+    static auto address_resolver(CAvahiClient* c, SockAddr& addr, AvahiHandler::OnHostName callback, AvahiLookupFlags flags=(AvahiLookupFlags)0) -> error_c {
+        auto ar = new CAvahiAddressResolver(addr,callback);
+        bool fail = !avahi_address_resolver_new(c->get(), AVAHI_IF_UNSPEC, 
+            addr.is_ip4()?AVAHI_PROTO_INET:AVAHI_PROTO_INET6, 
+            &ar->_addr, flags, CAvahiAddressResolver::address_resolver_callback, ar);
+        if (fail) return c->error("address_resolver_new");
+        return error_c();
+    }
+    CAvahiAddressResolver(SockAddr& addr, AvahiHandler::OnHostName callback) {
+        addr.to_avahi(_addr);
+        _on_resolve = callback;
+    }
+
+private:
+    static void address_resolver_callback( AvahiAddressResolver *r, AvahiIfIndex interface, AvahiProtocol protocol,
+            AvahiResolverEvent event, const AvahiAddress *a, const char *name, AvahiLookupResultFlags flags, 
+            void *userdata) {
+        auto ar = (CAvahiAddressResolver*) userdata;
+        if (ar->_on_resolve) {
+            std::string n;
+            if (event == AVAHI_RESOLVER_FOUND) n = std::string(name);
+            ar->_on_resolve(n);
+        }
+        avahi_address_resolver_free(r);
+        delete ar;
+    }
+
+    AvahiAddress _addr;
+    AvahiHandler::OnHostName _on_resolve;
+};
+
 class CAvahiServiceBrowser {
 public:
     using OnRemove = AvahiQuery::OnRemove;
@@ -70,7 +104,7 @@ public:
         CAvahiService item, 
         const char *host_name, const AvahiAddress *a, uint16_t port,
         AvahiStringList *txt, AvahiLookupResultFlags flags)>;*/
-    CAvahiServiceBrowser(CAvahiClient* c):_client(c),_service_pattern(".*"){};
+    CAvahiServiceBrowser(CAvahiClient* c):_client(c),_service_pattern(".*"){}
     ~CAvahiServiceBrowser() {
         if (_sb) {
             log.debug()<<"avahi_service_browser_free"<<std::endl;
@@ -381,6 +415,9 @@ public:
     }
     auto query_service(CAvahiService pattern, AvahiLookupFlags flags) -> std::unique_ptr<AvahiQuery> override {
         return std::unique_ptr<AvahiQuery>(new AvahiQueryImpl{&_client,pattern,flags});
+    }
+    auto query_host_name(SockAddr& addr, OnHostName callback, AvahiLookupFlags flags=(AvahiLookupFlags)0) -> error_c override {
+        return CAvahiAddressResolver::CAvahiAddressResolver::address_resolver(&_client,addr,callback,flags);
     }
     auto get_register_group() -> std::unique_ptr<AvahiGroup> override {
         return std::make_unique<AvahiGroupImpl>(&_client);

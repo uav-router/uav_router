@@ -14,7 +14,7 @@ void test() {
         return;
     }
     auto resolver = loop->address();
-    resolver->init("google.com", 80, [](SockAddrList&& list){
+    resolver->init("192.168.0.111", 80, [](SockAddrList&& list){
         auto l = std::move(list);
         std::cout<<"Addreses of google.com:"<<std::endl;
         for (auto& addr : l) {
@@ -29,6 +29,7 @@ void test() {
 int main() {
     Log::init();
     Log::set_level(Log::Level::DEBUG,{"ioloop"});
+    Log::set_level(Log::Level::DEBUG);
     test();
     return 0;
 }

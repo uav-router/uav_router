@@ -15,7 +15,7 @@ public:
     // loop items
     virtual auto uart(const std::string& name) -> std::unique_ptr<UART> = 0;
     //virtual auto service_client(const std::string& name) -> std::unique_ptr<ServiceClient> = 0;
-    //virtual auto tcp_client(const std::string& name) -> std::unique_ptr<TcpClient> = 0;
+    virtual auto tcp_client(const std::string& name) -> std::unique_ptr<TcpClient> = 0;
     //virtual auto udp_client(const std::string& name) -> std::unique_ptr<UdpClient> = 0;
     //virtual auto tcp_server(const std::string& name) -> std::unique_ptr<TcpServer> = 0;
     //virtual auto udp_server(const std::string& name) -> std::unique_ptr<UdpServer> = 0;
