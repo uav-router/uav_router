@@ -87,6 +87,7 @@ public:
         if (_fd != -1) { _poll->del(_fd, this);
         }
         cleanup();
+        _exists = false;
     }
     auto init(const std::string& path, int baudrate=115200, bool flow_control=false) -> error_c override {
         _path = path;
@@ -101,6 +102,7 @@ public:
     void init_uart_retry() {
         error_c ret = init_uart();
         if (on_error(ret,"init_uart")) {
+            if (!_exists) return;
             if (!_usb_id.empty() && ret == std::error_condition(std::errc::no_such_device)) {
                 return;
             }
@@ -198,6 +200,7 @@ public:
                 errno_c ret;
                 if (ret != std::error_condition(std::errc::resource_unavailable_try_again)) {
                     on_error(ret, "uart read");
+                    if (!_exists) return HANDLED;
                 }
                 break;
             }
@@ -205,13 +208,17 @@ public:
                 log.warning()<<"UART read returns 0 bytes"<<std::endl;
                 break;
             }
-            if (auto client = cli()) client->on_read(buffer.data(), n);
+            if (auto client = cli()) {
+                if (!_exists) return HANDLED;
+                client->on_read(buffer.data(), n);
+            }
+            if (!_exists) return HANDLED;
         }
         return HANDLED;
     }
 
     auto epollOUT() -> int override {
-        if (auto client = cli()) client->writeable();
+        auto client = cli();
         return HANDLED;
     }
 
@@ -225,6 +232,7 @@ public:
             _poll->del(_fd, this);
         }
         cleanup(false);
+        if (!_exists) return HANDLED;
         if (_usb_id.empty()) init_uart_retry();
         return HANDLED;
     }
@@ -243,7 +251,7 @@ public:
         cleanup(true);
     }
 
-    auto cli() -> std::shared_ptr<UARTClient> {
+    auto cli(bool writeable=true) -> std::shared_ptr<UARTClient> {
         std::shared_ptr<UARTClient> ret;
         if (!_client.expired()) { 
             ret = _client.lock();
@@ -256,6 +264,7 @@ public:
             }
             ret->on_error([this](error_c ec){on_error(ec);});
             _client = ret;
+            if (writeable) ret->writeable();
             on_connect(ret, ret->get_peer_name());
         }
         return ret;
@@ -286,6 +295,7 @@ public:
 
     int _fd = -1;
     std::weak_ptr<UARTClient> _client;
+    bool _exists = true;
 
     Poll* _poll;
     UdevLoop* _udev;
