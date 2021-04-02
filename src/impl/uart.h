@@ -1,5 +1,6 @@
 #ifndef __UART_IMPL_H__
 #define __UART_IMPL_H__
+#include <memory>
 #include <unistd.h>
 #include <termios.h>
 #include <linux/serial.h>
@@ -78,6 +79,18 @@ public:
 };
 
 class UARTImpl : public UART, public IOPollable, public UdevPollable {
+    class UdevPollableProxy:public UdevPollable {
+    public:
+        UdevPollableProxy(UdevPollable* obj):_obj(obj) {}
+        void udev_add(const std::string& node, const std::string& id) override {
+            _obj->udev_add(node,id);
+        }
+        void udev_remove(const std::string& node, const std::string& id) override {
+            _obj->udev_remove(node,id);
+        }
+    private:
+        UdevPollable* _obj;
+    };
 public:
     UARTImpl(std::string name, IOLoopSvc* loop): IOPollable("uart"), _name(std::move(name)), _poll(loop->poll()), _udev(loop->udev()) {
         _timer = loop->timer();
@@ -114,6 +127,14 @@ public:
         on_error(ret,"uart loop add");
     }
 
+    void start_udev_watch() {
+        if (!_usb_id.empty() && !_udev_pollable) {
+            log.debug()<<"USB port "<<_usb_id<<" detected"<<std::endl;
+            _udev_pollable = std::make_shared<UdevPollableProxy>(this);
+            _udev->start_watch(_udev_pollable);
+        }
+    }
+
     auto init_uart() -> error_c {
         if (_fd!=-1) { 
             close(_fd);
@@ -128,10 +149,7 @@ public:
                 } else {
                     _usb_id = _udev->find_id(_path);
                 }
-                if (!_usb_id.empty()) {
-                    log.debug()<<"USB port "<<_usb_id<<" detected"<<std::endl;
-                    _udev->start_watch(this);
-                }
+                start_udev_watch();
             }
             if (!_usb_id.empty()) {
                 auto found = _udev->find_path(_usb_id);
@@ -200,7 +218,7 @@ public:
                 errno_c ret;
                 if (ret != std::error_condition(std::errc::resource_unavailable_try_again)) {
                     on_error(ret, "uart read");
-                    if (!_exists) return HANDLED;
+                    if (!_exists) return STOP;
                 }
                 break;
             }
@@ -209,10 +227,10 @@ public:
                 break;
             }
             if (auto client = cli()) {
-                if (!_exists) return HANDLED;
+                if (!_exists) return STOP;
                 client->on_read(buffer.data(), n);
             }
-            if (!_exists) return HANDLED;
+            if (!_exists) return STOP;
         }
         return HANDLED;
     }
@@ -228,27 +246,24 @@ public:
     }
 
     auto epollHUP() -> int override {
+        log.debug()<<"EPOLLHUP on uart "<<_path<<std::endl;
         if (_fd != -1) {
             _poll->del(_fd, this);
         }
-        cleanup(false);
-        if (!_exists) return HANDLED;
+        cleanup();
+        if (!_exists) return STOP;
         if (_usb_id.empty()) init_uart_retry();
         return HANDLED;
     }
 
-    void cleanup(bool with_udev) {
+    void cleanup() override {
         if (!_client.expired()) {
             if (auto client = cli()) client->on_close();
         }
         if (_fd != -1) {
             close(_fd);
             _fd = -1;
-            if (!_usb_id.empty() && with_udev) _udev->stop_watch(this);
         }
-    }
-    void cleanup() override {
-        cleanup(true);
     }
 
     auto cli(bool writeable=true) -> std::shared_ptr<UARTClient> {
@@ -279,9 +294,10 @@ public:
     void udev_remove(const std::string& node, const std::string& id) override {
         if (id==_usb_id) {
             log.debug()<<"Device "<<_usb_id<<" removed"<<std::endl;
-            if (_fd!=-1) { _poll->del(_fd,this);
+            if (_fd!=-1) { 
+                _poll->del(_fd,this);
+                cleanup();
             }
-            cleanup(false);
         }
     }
 
@@ -295,6 +311,7 @@ public:
 
     int _fd = -1;
     std::weak_ptr<UARTClient> _client;
+    std::shared_ptr<UdevPollable> _udev_pollable;
     bool _exists = true;
 
     Poll* _poll;

@@ -1,6 +1,7 @@
 #ifndef __UDEV_INC_H__
 #define __UDEV_INC_H__
 #include <string>
+#include <memory>
 
 class UdevPollable {
 public:
@@ -10,8 +11,7 @@ public:
 
 class UdevLoop {
 public:
-    virtual void start_watch(UdevPollable* obj) = 0;
-    virtual void stop_watch(UdevPollable* obj) = 0;
+    virtual void start_watch(std::shared_ptr<UdevPollable>& obj) = 0;
     virtual auto find_id(const std::string& path) -> std::string = 0;
     virtual auto find_path(const std::string& id) -> std::string = 0;
 };

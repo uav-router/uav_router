@@ -1,8 +1,10 @@
 #ifndef __UDEV_IMPL__H__
 #define __UDEV_IMPL__H__
 
+#include <memory>
 #include <unistd.h>
-#include <set>
+#include <forward_list>
+
 #include <sys/epoll.h>
 #include <libudev.h> //dnf install systemd-devel; apt-get install libudev-dev
 #include "../loop.h"
@@ -54,12 +56,16 @@ public:
             }
         }
         if (link.empty()) return;
-        for(auto& obj: udev_watches) {
-            if (action=="add") {
-                obj->udev_add(node,link);
-            } else {
-                obj->udev_remove(node,link);
+        auto it = udev_watches.before_begin();
+        for(auto p = udev_watches.begin();p!=udev_watches.end();p=std::next(it)) {
+            if (p->expired()) {
+                p = udev_watches.erase_after(it);
+                continue;
             }
+            if (action=="add") { p->lock()->udev_add(node,link);
+            } else {             p->lock()->udev_remove(node,link);
+            }
+            it = p;
         }
     }
 
@@ -160,19 +166,16 @@ public:
         return ret;
     }
 
-    void start_watch(UdevPollable* obj) override {
-        udev_watches.insert(obj);
+    void start_watch(std::shared_ptr<UdevPollable>& obj) override {
+        udev_watches.push_front(obj);
     }
-    void stop_watch(UdevPollable* obj) override {
-        udev_watches.erase(obj);
-    }
-
+    
 
 private:
     udev *_udev = nullptr;
     udev_monitor *_mon = nullptr;
     int _fd = -1;
-    std::set<UdevPollable*> udev_watches;
+    std::forward_list<std::weak_ptr<UdevPollable>> udev_watches;
     Poll* _poll;
     error_c _ec;
 };

@@ -33,7 +33,7 @@ void test() {
             endpoint->on_error([](const error_c& ec) {
                 std::cout<<"UART cli error:"<<ec<<std::endl;
             });
-            std::cout<<"Connect to"<<name<<std::endl;
+            std::cout<<"Connect to "<<name<<std::endl;
         });
         uart->on_error([](const error_c& ec) {
             std::cout<<"UART error:"<<ec<<std::endl;
@@ -45,7 +45,7 @@ void test() {
 
 int main() {
     Log::init();
-    Log::set_level(Log::Level::DEBUG,{"ioloop"});
+    Log::set_level(Log::Level::DEBUG,{"ioloop","uart"});
     test();
     return 0;
 }
