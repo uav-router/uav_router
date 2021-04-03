@@ -71,10 +71,10 @@ public:
         }
         if (list) {
             auto it = list->names.find(addr);
-            if (it==list->names.end()) return addr.format(SockAddr::REG_SERVICE);
+            if (it==list->names.end()) return std::string();
             return it->second;
         }
-        return addr.format(SockAddr::REG_SERVICE);
+        return std::string();
     }
     std::unique_ptr<AvahiHandler> handler;
     std::unique_ptr<ServiceListener> _tcp;

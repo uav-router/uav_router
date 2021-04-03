@@ -4,7 +4,8 @@ import sys
 # Create a TCP/IP socket
 sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 # Bind the socket to the port
-server_address = ('192.168.0.25', 10000)
+#server_address = ('192.168.0.25', 10000)
+server_address = (sys.argv[1], int(sys.argv[2]))
 print('starting up on %s port %s' % server_address)
 sock.bind(server_address)
 sock.listen(1)

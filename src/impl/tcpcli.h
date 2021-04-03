@@ -46,6 +46,11 @@ public:
         _addr = _addresses.end();
     }
 
+    ~TcpClientImpl() override {
+        _exists = false;
+        cleanup();
+    }
+
     auto init(const std::string& host, uint16_t port) -> error_c override {
         return _resolv->init(host, port, [this](SockAddrList&& a) {
             _addresses = std::move(a);
@@ -54,22 +59,52 @@ public:
         });
     }
 
+    void connect() {
+        if (_addresses.empty()) {
+            _resolv->requery();
+            return;
+        }   
+        if (_addr==_addresses.end()) {
+            _timer->arm_oneshoot(3s);
+            _addr = _addresses.begin();
+            return;
+        }
+        error_c ret = create_connection();
+        if (ret) {
+            on_error(ret,"create tcp connection");
+            _addr++;
+            connect();
+        }
+    }
+
     auto connect_to_peer() -> error_c {
         error_c ret = _addr->connect(_fd);
         if (ret && ret!=std::error_condition(std::errc::operation_in_progress)) {
             close(_fd);
+            _fd=-1;
             return ret;
         }
         ret = _loop->poll()->add(_fd, EPOLLIN | EPOLLOUT | EPOLLRDHUP | EPOLLET, this);
         if (ret) {
             close(_fd);
+            _fd=-1;
         }
         return ret;
     }
 
-    auto create_connection() ->error_c {
+    void connect_to_peer_retry() {
+        error_c ret = connect_to_peer();
+        if (ret) {
+            on_error(ret, "connect to peer");
+            _addr++;
+            connect();
+        }
+    }
+
+    auto create_connection() -> error_c {
         if (_fd!=-1) { 
             cleanup();
+            if (!_exists) return error_c();
         }
         _fd = socket(_addr->family(), SOCK_STREAM | SOCK_NONBLOCK, 0);
         if (_fd == -1) { return errno_c("tcp client socket");
@@ -90,6 +125,11 @@ public:
             return connect_to_peer();
         }
         peer_name = _loop->zeroconf()->query_service_name(*_addr, SOCK_STREAM);
+        if (peer_name.empty()) {
+            peer_name = _addr->format(SockAddr::REG_SERVICE);
+            return connect_to_peer();
+        }
+        // subscribe to peer_name
 
         auto any = SockAddr::any(_addr->family());
         ret = any.bind(_fd);
@@ -106,6 +146,7 @@ public:
                 on_error(ec,"add service");
                 ec = g->reset();
                 on_error(ec,"reset service");
+                connect_to_peer_retry();
             } else {
                 ec = g->commit();
                 on_error(ec,"commit service");
@@ -114,33 +155,18 @@ public:
         _group->on_collision([this](AvahiGroup* g){ 
             log.error()<<"Collision on endpoint name "<<name<<std::endl;
             g->reset();
-            on_error(connect_to_peer());
+            connect_to_peer_retry();
         });
         _group->on_established([this](AvahiGroup* g){ 
             log.info()<<"Service "<<name<<" registered"<<std::endl;
-            on_error(connect_to_peer());
+            connect_to_peer_retry();
         });
         _group->on_failure([this](error_c ec){ 
-            on_error(ec);
-            on_error(connect_to_peer());
+            on_error(ec,"registration failure");
+            connect_to_peer_retry();
         });
         _group->create();
         return error_c();
-    }
-
-    void connect() {
-        if (_addresses.empty()) {
-            _resolv->requery();
-            return;
-        }   
-        while(_addr!=_addresses.end()) {
-            error_c ret = create_connection();
-            if (!ret) return;
-            on_error(ret);
-            _addr++;
-        }
-        _timer->arm_oneshoot(3s);
-        _addr = _addresses.begin();
     }
 
     void cleanup() override {
@@ -166,6 +192,7 @@ public:
             error_c ret = err_chk(ioctl(_fd, FIONREAD, &sz),"tcp ioctl");
             if (ret) {
                 on_error(ret, "Query buffer size error");
+                if (!_exists) return STOP;
             } else {
                 if (sz==0) {
                     log.debug()<<"nothing to read"<<std::endl;
@@ -177,12 +204,14 @@ public:
                     errno_c ret;
                     if (ret != std::error_condition(std::errc::resource_unavailable_try_again)) {
                         on_error(ret, "tcp recv");
+                        if (!_exists) return STOP;
                     }
                 } else {
                     if (n != sz) {
                         log.warning()<<"Data declared size "<<sz<<" is differ than read "<<n<<std::endl;
                     }
                     if (auto client = cli()) client->on_read(buffer, n);
+                    if (!_exists) return STOP;
                 }
             }
         }
@@ -197,7 +226,9 @@ public:
     auto epollRDHUP() -> int override {
         if (_fd==-1) {
             error_c ret = _loop->poll()->del(_fd, this);
-            if (ret) { on_error(ret,"tcp event");
+            if (ret) { 
+                on_error(ret,"tcp event");
+                if (!_exists) return STOP;
             }
         }
         cleanup();
@@ -231,6 +262,7 @@ private:
     SockAddrList _addresses;
     SockAddrList::iterator _addr;
     int _fd = -1;
+    bool _exists = true;
     IOLoopSvc* _loop;
     std::string peer_name;
     std::unique_ptr<AddressResolver> _resolv;
