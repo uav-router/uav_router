@@ -2,6 +2,7 @@
 #define __ENDPOINTS_H__
 #include <functional>
 #include <memory>
+#include <sys/socket.h>
 
 #include "../err.h"
 /*
@@ -55,7 +56,7 @@ class Client : public Readable, public Writeable, public Closeable {
 class StreamSource: public error_handler {
 public:
     using OnConnectFunc  = std::function<void(std::shared_ptr<Client>, std::string)>;
-    virtual void on_connect(OnConnectFunc func) { _on_connect = func;
+    void on_connect(OnConnectFunc func) { _on_connect = func;
     }
 protected:
     void on_connect(std::shared_ptr<Client> cli, std::string name) { 
@@ -72,7 +73,7 @@ public:
 
 class TcpClient: public StreamSource {
 public:
-    virtual auto init(const std::string& host, uint16_t port) -> error_c = 0;
+    virtual auto init(const std::string& host, uint16_t port, int family=AF_UNSPEC) -> error_c = 0;
 };
 
 class ServiceClient: public StreamSource {
@@ -89,11 +90,10 @@ public:
 
 class TcpServer:  public StreamSource {
 public:
-    virtual auto init(uint16_t port) -> error_c = 0;
-    virtual auto service() -> error_c = 0;
+    virtual auto init(uint16_t port = 0, int family = AF_INET) -> error_c = 0;
     
     virtual auto address(const std::string& address) -> TcpServer& = 0;
-    virtual auto interface(const std::string& address) -> TcpServer& = 0;
+    virtual auto interface(const std::string& interface, int family = AF_INET) -> TcpServer& = 0;
 };
 
 class UdpServer:  public StreamSource {

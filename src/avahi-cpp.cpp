@@ -290,6 +290,8 @@ public:
             if (avahi_entry_group_is_empty(_group)>0 && _on_create) {
                 _on_create(this);
             }
+        } else if (_on_failure) {
+            _on_failure(avahi_code(AVAHI_ERR_BAD_STATE,"Group creation. Client bad state."));
         }
     }
     void client_create() {

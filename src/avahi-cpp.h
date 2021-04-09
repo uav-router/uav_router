@@ -26,12 +26,8 @@ struct CAvahiService {
         type = std::move(t);
         return *this;
     }
-    auto ipv4() -> CAvahiService& {
-        protocol = AVAHI_PROTO_INET;
-        return *this;
-    }
-    auto ipv6() -> CAvahiService& {
-        protocol = AVAHI_PROTO_INET6;
+    auto family(int af) -> CAvahiService& {
+        protocol = avahi_af_to_proto(af);
         return *this;
     }
     auto itf(std::string if_name) -> CAvahiService& {

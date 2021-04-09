@@ -1,5 +1,6 @@
 #include "log.h"
 #include "loop.h"
+#include <sys/socket.h>
 
 void browser() {
     auto loop = IOLoopSvc::loop();
@@ -8,7 +9,7 @@ void browser() {
         std::cout<<"Ctrl-C handler error "<<ec<<std::endl;
         return;
     }
-    auto sb = loop->zeroconf()->query_service(CAvahiService("(.*)","_http._tcp").ipv4().itf("tap0"));
+    auto sb = loop->zeroconf()->query_service(CAvahiService("(.*)","_http._tcp").family(AF_INET).itf("tap0"));
     sb->on_failure([](error_c ec){
         std::cout<<"Query service error: "<<ec<<std::endl;
     });
@@ -50,7 +51,7 @@ void register_service() {
     auto group = loop->zeroconf()->get_register_group();
     group->on_create([](AvahiGroup* g){ 
         error_c ec = g->add_service(
-            CAvahiService("MegaPrn","_ipp._tcp").ipv4().itf("tap0"),
+            CAvahiService("MegaPrn","_ipp._tcp").family(AF_INET).itf("tap0"),
             651
         );
         if (ec) {

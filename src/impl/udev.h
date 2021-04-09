@@ -166,7 +166,7 @@ public:
         return ret;
     }
 
-    void start_watch(std::shared_ptr<UdevPollable>& obj) override {
+    void start_watch(std::shared_ptr<UdevEvents>& obj) override {
         udev_watches.push_front(obj);
     }
     
@@ -175,7 +175,7 @@ private:
     udev *_udev = nullptr;
     udev_monitor *_mon = nullptr;
     int _fd = -1;
-    std::forward_list<std::weak_ptr<UdevPollable>> udev_watches;
+    std::forward_list<std::weak_ptr<UdevEvents>> udev_watches;
     Poll* _poll;
     error_c _ec;
 };

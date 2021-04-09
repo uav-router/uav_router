@@ -156,7 +156,7 @@ public:
     }
 
     auto requery() -> error_c override {
-        error_c ret = _ai.init(_host,std::to_string(_port),AF_INET,SOCK_DGRAM,IPPROTO_UDP, AI_V4MAPPED | AI_ADDRCONFIG | AI_CANONNAME);
+        error_c ret = _ai.init(_host,std::to_string(_port),_family,_socktype,_protocol, _flags);
         if (on_error(ret,"address_resolving")) return ret;
         return error_c();
     }
@@ -170,6 +170,33 @@ public:
         }
         if (_on_resolve) _on_resolve(ai);
     }
+
+    auto family(int f) -> AddressResolver&   override {
+        _family = f;
+        return *this;
+    }
+    auto socktype(int t) -> AddressResolver& override {
+        _socktype = t;
+        return *this;
+    }
+    auto protocol(int p) -> AddressResolver& override {
+        _protocol = p;
+        return *this;
+    }
+    auto flags(int f) -> AddressResolver&    override {
+        _flags = f;
+        return *this;
+    }
+    auto add_flags(int f) -> AddressResolver& override {
+        _flags |= f;
+        return *this;
+    }
+    
+    int _family = AF_UNSPEC;
+    int _socktype = 0;
+    int _protocol = 0;
+    int _flags = AI_V4MAPPED | AI_ADDRCONFIG | AI_CANONNAME;
+
     IOLoop *_loop;
     AddrInfo _ai;
     std::unique_ptr<Timer> _timer;

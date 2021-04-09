@@ -52,6 +52,7 @@ public:
   
   auto bind(int fd) ->error_c;
   auto connect(int fd) ->error_c;
+  auto accept(int fd) ->int;
   auto to_avahi(AvahiAddress& addr) -> bool;
 
   auto operator=(const SockAddr &other) -> SockAddr &;
@@ -78,14 +79,11 @@ class SockAddrList : public std::forward_list<SockAddr> {
 public:
     SockAddrList() = default;
     SockAddrList(addrinfo *ai);
-    auto current() -> SockAddr&;
-    auto next() -> SockAddr&;
+    SockAddrList(const SockAddr& addr);
     void add(const SockAddr& addr);
     void add(SockAddr&& addr);
     auto interface(const std::string& name, uint16_t port, int family = AF_UNSPEC) -> error_c;
     auto broadcast(const std::string& name, uint16_t port) -> error_c;
-private:
-    iterator _current = end();
 };
 
 #endif  // __SOCKADDR_H__

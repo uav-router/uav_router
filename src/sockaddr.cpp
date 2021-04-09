@@ -166,7 +166,7 @@ auto SockAddr::sock_addr() -> struct sockaddr* {
     return (struct sockaddr*)&(_impl->addr.storage);
 }
 auto SockAddr::len() -> socklen_t {
-    if (!_impl) _impl = std::make_unique<SockAddrImpl>();
+    if (!_impl) return 0;
     return _impl->length;
 }
 
@@ -221,11 +221,16 @@ auto SockAddr::operator=(const SockAddr& other) -> SockAddr& {
 
 auto SockAddr::bind(int fd) ->error_c {
     if (!_impl) return errno_c(EINVAL,"bind no address");
-    return err_chk(::bind(fd,(sockaddr*)&(_impl->addr.storage),_impl->length),"bind");
+    return err_chk(::bind(fd,sock_addr(),_impl->length),"bind");
 }
 auto SockAddr::connect(int fd) ->error_c {
     if (!_impl) return errno_c(EINVAL,"connect no address");
-    return err_chk(::connect(fd,(sockaddr*)&(_impl->addr.storage),_impl->length),"bind");
+    return err_chk(::connect(fd,sock_addr(),_impl->length),"bind");
+}
+
+auto SockAddr::accept(int fd) ->int {
+    if (!_impl) _impl = std::make_unique<SockAddrImpl>();
+    return ::accept(fd,sock_addr(),&size());
 }
 
 auto SockAddr::to_avahi(AvahiAddress& addr) -> bool {
@@ -306,24 +311,11 @@ auto operator<<(std::ostream &os, const SockAddr &addr) -> std::ostream& {
     return os;
 }
 
-auto SockAddrList::current() -> SockAddr& {
-    if (_current==end()) _current = begin();
-    return *_current;
-}
-auto SockAddrList::next() -> SockAddr& {
-    if (_current==end()) { _current = begin(); return *_current;
-    }
-    _current++;
-    if (_current==end()) _current = begin();
-    return *_current;
-}
 void SockAddrList::add(const SockAddr& addr) {
     push_front(addr);
-    _current = begin();
 }
 void SockAddrList::add(SockAddr&& addr) {
     push_front(addr);
-    _current = begin();
 }
 
 auto SockAddrList::interface(const std::string& name, uint16_t port, int family) -> error_c {
@@ -362,7 +354,11 @@ auto SockAddrList::broadcast(const std::string& name, uint16_t port) -> error_c 
 }
 
 SockAddrList::SockAddrList(addrinfo *ai) {
-    Log::debug()<<"ai constructor"<<std::endl;
+    //Log::debug()<<"ai constructor"<<std::endl;
     for(;ai;ai=ai->ai_next) { add(SockAddr(ai));
     }
+}
+
+SockAddrList::SockAddrList(const SockAddr& addr) {
+    add(addr);
 }

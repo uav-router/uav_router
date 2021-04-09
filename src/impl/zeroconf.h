@@ -17,7 +17,7 @@ public:
         AvahiLookupResultFlags flags){ 
             auto svcptr = _service.find(service.name);
             if (svcptr==_service.end()) {
-                _service[service.name] = std::forward_list<SockAddr>({addr});
+                _service[service.name] = addr;
             } else {
                 svcptr->second.push_front(addr);
             }
@@ -25,26 +25,57 @@ public:
             for(auto& rec: txt) {
                 if (rec.first=="endpoint") name = rec.second;
             }
-            if (name.empty()) {
-                name = service.name;
+            auto it = _watches.before_begin();
+            for(auto p = _watches.begin();p!=_watches.end();p=std::next(it)) {
+                if (p->expired()) {
+                    p = _watches.erase_after(it);
+                    continue;
+                }
+                p->lock()->svc_resolved(service.name,name,addr);
+                it = p;
             }
-            names[addr]=name;
+            if (name.empty()) {
+                names[addr]=service.name;
+            } else {
+                names[addr]=name;
+                aliases[name]=service.name;
+            }
         });
         _sb->on_remove([this](CAvahiService service, AvahiLookupResultFlags flags) {
+            auto it = _watches.before_begin();
+            for(auto p = _watches.begin();p!=_watches.end();p=std::next(it)) {
+                if (p->expired()) {
+                    p = _watches.erase_after(it);
+                    continue;
+                }
+                p->lock()->svc_removed(service.name);
+                it = p;
+            }
             auto svcptr = _service.find(service.name);
             if (svcptr==_service.end()) return;
+            std::string endpoint_name;
             for(auto& addr : svcptr->second) {
+                endpoint_name = names[addr];
                 names.erase(addr);
             }
             _service.erase(svcptr);
+            if (!endpoint_name.empty()) { aliases.erase(endpoint_name);
+            }
         });
     }
+
+    void start_watch(std::shared_ptr<ServiceEvents>& obj) {
+        _watches.push_front(obj);
+    }
+
     std::map<SockAddr,std::string> names;
+    std::map<std::string,std::string> aliases;
 
 private:
     std::unique_ptr<AvahiQuery> _sb;
     Avahi* _avahi;
-    std::map<std::string,std::forward_list<SockAddr>> _service;
+    std::map<std::string,SockAddrList> _service;
+    std::forward_list<std::weak_ptr<ServiceEvents>> _watches;
 };
 class AvahiImpl : public Avahi {
 public:
@@ -63,19 +94,34 @@ public:
     auto query_host_name(SockAddr& addr, OnHostName callback, AvahiLookupFlags flags=(AvahiLookupFlags)0) -> error_c override {
         return handler->query_host_name(addr, callback, flags);
     }
-    auto query_service_name(SockAddr& addr, int type) -> std::string override {
+    auto query_service_name(SockAddr& addr, int type) -> std::pair<std::string,std::string> override {
         ServiceListener *list = nullptr;
         if (type==SOCK_STREAM) { list = _tcp.get();
         }
         if (type==SOCK_DGRAM) { list = _udp.get();
         }
         if (list) {
-            auto it = list->names.find(addr);
-            if (it==list->names.end()) return std::string();
-            return it->second;
+            auto endpointptr = list->names.find(addr);
+            if (endpointptr!=list->names.end()) {
+                auto nameptr = list->aliases.find(endpointptr->second);
+                if (nameptr!=list->aliases.end()) { 
+                    return std::make_pair(nameptr->second,endpointptr->second);
+                }
+                return std::make_pair(endpointptr->second,endpointptr->second);
+            }
         }
-        return std::string();
+        return std::make_pair(std::string(),std::string());
     }
+    void watch_services(std::shared_ptr<ServiceEvents>& obj, int type) override {
+        ServiceListener *list = nullptr;
+        if (type==SOCK_STREAM) { list = _tcp.get();
+        }
+        if (type==SOCK_DGRAM) { list = _udp.get();
+        }
+        if (list) { list->start_watch(obj);
+        }
+    }
+
     std::unique_ptr<AvahiHandler> handler;
     std::unique_ptr<ServiceListener> _tcp;
     std::unique_ptr<ServiceListener> _udp;

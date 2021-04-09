@@ -78,10 +78,10 @@ public:
 
 };
 
-class UARTImpl : public UART, public IOPollable, public UdevPollable {
-    class UdevPollableProxy:public UdevPollable {
+class UARTImpl : public UART, public IOPollable, public UdevEvents {
+    class UdevPollableProxy:public UdevEvents {
     public:
-        UdevPollableProxy(UdevPollable* obj):_obj(obj) {}
+        UdevPollableProxy(UdevEvents* obj):_obj(obj) {}
         void udev_add(const std::string& node, const std::string& id) override {
             _obj->udev_add(node,id);
         }
@@ -89,7 +89,7 @@ class UARTImpl : public UART, public IOPollable, public UdevPollable {
             _obj->udev_remove(node,id);
         }
     private:
-        UdevPollable* _obj;
+        UdevEvents* _obj;
     };
 public:
     UARTImpl(std::string name, IOLoopSvc* loop): IOPollable("uart"), _name(std::move(name)), _poll(loop->poll()), _udev(loop->udev()) {
@@ -311,7 +311,7 @@ public:
 
     int _fd = -1;
     std::weak_ptr<UARTClient> _client;
-    std::shared_ptr<UdevPollable> _udev_pollable;
+    std::shared_ptr<UdevEvents> _udev_pollable;
     bool _exists = true;
 
     Poll* _poll;

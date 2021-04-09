@@ -1,5 +1,6 @@
 #ifndef __TCPCLI__H__
 #define __TCPCLI__H__
+#include <netinet/in.h>
 #include <sys/epoll.h>
 #include <sys/ioctl.h>
 
@@ -39,23 +40,42 @@ public:
     friend class TcpClientImpl;
 };
 
-class TcpClientImpl : public TcpClient, public IOPollable {
+class TcpClientImpl : public TcpClient, public IOPollable, public ServiceEvents {
+    class ServicePollableProxy:public ServiceEvents {
+    public:
+        ServicePollableProxy(ServiceEvents* obj):_obj(obj) {}
+        void svc_resolved(std::string name, std::string endpoint, const SockAddr& addr) override {
+            _obj->svc_resolved(name,endpoint,addr);
+        }
+        void svc_removed(std::string name) override {
+            _obj->svc_removed(name);
+        }
+    private:
+        ServiceEvents* _obj;
+    };
 public:
     TcpClientImpl(const std::string name, IOLoopSvc* loop):IOPollable(name),_loop(loop),_resolv(loop->address()),_timer(loop->timer()) {
         _timer->shoot([this](){ connect(); });
         _addr = _addresses.end();
+        auto on_err = [this,name](error_c& ec){ on_error(ec,name);};
+        _resolv->on_error(on_err);
+        _timer->on_error(on_err);
     }
 
     ~TcpClientImpl() override {
         _exists = false;
+        if (_fd != -1) {
+            _loop->poll()->del(_fd, this);
+        }
         cleanup();
     }
 
-    auto init(const std::string& host, uint16_t port) -> error_c override {
-        return _resolv->init(host, port, [this](SockAddrList&& a) {
-            _addresses = std::move(a);
-            _addr = _addresses.begin();
-            connect();
+    auto init(const std::string& host, uint16_t port, int family) -> error_c override {
+        return _resolv->family(family).socktype(SOCK_STREAM).protocol(IPPROTO_TCP)
+            .init(host, port, [this](SockAddrList&& a) {
+                _addresses = std::move(a);
+                _addr = _addresses.begin();
+                connect();
         });
     }
 
@@ -119,17 +139,24 @@ public:
         error_c ret = err_chk(setsockopt(_fd,SOL_SOCKET,SO_KEEPALIVE,&yes,sizeof(yes)),"keepalive");
         if (ret) { return ret;
         }
+        canon_peer_name.clear();
         auto zeroconf = _loop->zeroconf();
         if (!zeroconf) {
             peer_name = _addr->format(SockAddr::REG_SERVICE);
             return connect_to_peer();
         }
-        peer_name = _loop->zeroconf()->query_service_name(*_addr, SOCK_STREAM);
+        auto names = _loop->zeroconf()->query_service_name(*_addr, SOCK_STREAM);
+        peer_name = names.first;
         if (peer_name.empty()) {
             peer_name = _addr->format(SockAddr::REG_SERVICE);
             return connect_to_peer();
         }
+        canon_peer_name = names.second;
         // subscribe to peer_name
+        if (!_service_pollable) {
+            _service_pollable = std::make_shared<ServicePollableProxy>(this);
+            _loop->zeroconf()->watch_services(_service_pollable, SOCK_STREAM);
+        }
 
         auto any = SockAddr::any(_addr->family());
         ret = any.bind(_fd);
@@ -220,11 +247,12 @@ public:
 
     auto epollOUT() -> int override {
         auto client = cli();
+        if (!_exists) return STOP;
         return HANDLED;
     }
 
     auto epollRDHUP() -> int override {
-        if (_fd==-1) {
+        if (_fd!=-1) {
             error_c ret = _loop->poll()->del(_fd, this);
             if (ret) { 
                 on_error(ret,"tcp event");
@@ -232,7 +260,11 @@ public:
             }
         }
         cleanup();
-        //if client exists - reconnect
+        if (!_exists) return STOP;
+        if (canon_peer_name.empty()) {
+            _addr++;
+            connect();
+        }
         return HANDLED;
     }
 
@@ -258,6 +290,32 @@ public:
         return ret;
     }
 
+    void svc_resolved(std::string name, std::string endpoint, const SockAddr& addr) override {
+        if (name==canon_peer_name) {
+            bool noaddr = _addresses.empty();
+            _addresses.add(addr);
+            if (noaddr) {
+                _addr = _addresses.begin();
+                connect();
+            }
+        }
+    }
+    void svc_removed(std::string name) override {
+        if (name==canon_peer_name) {
+            if (_fd!=-1) {
+                error_c ret = _loop->poll()->del(_fd, this);
+                if (ret) { 
+                    on_error(ret,"tcp event");
+                    if (!_exists) return;
+                }
+            }
+            cleanup();
+            if (!_exists) return;
+            _addresses.clear();
+            _addr = _addresses.end();
+        }
+    }
+
 private:
     SockAddrList _addresses;
     SockAddrList::iterator _addr;
@@ -265,10 +323,12 @@ private:
     bool _exists = true;
     IOLoopSvc* _loop;
     std::string peer_name;
+    std::string canon_peer_name;
     std::unique_ptr<AddressResolver> _resolv;
     std::unique_ptr<AvahiGroup> _group;
     std::unique_ptr<Timer> _timer;
     std::weak_ptr<TCPClientStream> _client;
+    std::shared_ptr<ServiceEvents> _service_pollable;
     inline static Log::Log log {"tcpclient"};
 };
 
