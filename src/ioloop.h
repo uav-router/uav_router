@@ -24,6 +24,7 @@ public:
     
     virtual void block_udev() = 0;
     virtual void block_zeroconf() = 0;
+    virtual void start_zeroconf() = 0;
     
     // stats
     //virtual auto stats() -> StatHandler& = 0;

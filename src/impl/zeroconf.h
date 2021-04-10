@@ -6,6 +6,7 @@
 #include <memory>
 #include <sys/socket.h>
 #include "../loop.h"
+#include "../log.h"
 #include "avahi-poll.h"
 
 class ServiceListener {
@@ -21,6 +22,7 @@ public:
             } else {
                 svcptr->second.push_front(addr);
             }
+            log.info()<<"New service "<<service.name<<" "<<addr.format(SockAddr::REG_SERVICE)<<std::endl;
             std::string name;
             for(auto& rec: txt) {
                 if (rec.first=="endpoint") name = rec.second;
@@ -42,6 +44,7 @@ public:
             }
         });
         _sb->on_remove([this](CAvahiService service, AvahiLookupResultFlags flags) {
+            log.info()<<"Remove service "<<service.name<<std::endl;
             auto it = _watches.before_begin();
             for(auto p = _watches.begin();p!=_watches.end();p=std::next(it)) {
                 if (p->expired()) {
@@ -76,6 +79,7 @@ private:
     Avahi* _avahi;
     std::map<std::string,SockAddrList> _service;
     std::forward_list<std::weak_ptr<ServiceEvents>> _watches;
+    inline static Log::Log log {"svclistener"};
 };
 class AvahiImpl : public Avahi {
 public:
