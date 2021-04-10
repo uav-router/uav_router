@@ -12,7 +12,6 @@ void test(const std::string& addr, int port) {
         std::cout<<"Ctrl-C handler error "<<ec<<std::endl;
         return;
     }
-    auto timer = loop->timer();
     auto cli = loop->tcp_client("TcpClient");        
     std::shared_ptr<Client> endpoint;
     cli->on_connect([&endpoint, &cli, &loop](std::shared_ptr<Client> stream, std::string name){
@@ -41,15 +40,10 @@ void test(const std::string& addr, int port) {
     cli->on_error([](const error_c& ec) {
         std::cout<<"TcpClient error:"<<ec<<std::endl;
         });
-    ec = timer->shoot([&loop,&addr,port,&cli](){
-        std::cout<<"Timer shoot"<<std::endl;
+    loop->zeroconf_ready([&loop,&addr,port,&cli](){
+        std::cout<<"Client create"<<std::endl;
         cli->init(addr,port);
-    }).arm_oneshoot(5s);
-    if (ec) {
-        std::cout<<"Setup timer error "<<ec<<std::endl;
-        return;
-    }
-    loop->start_zeroconf();
+    });
     loop->run();
 }
 

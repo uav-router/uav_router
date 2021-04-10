@@ -10,6 +10,8 @@ public:
 };
 class Avahi : public AvahiHandler {
 public:
+    using OnEvent = AvahiQuery::OnEvent;
+    virtual void on_ready(OnEvent func) = 0;
     virtual auto query_service_name(SockAddr& addr, int type) -> std::pair<std::string,std::string> = 0;
     virtual void watch_services(std::shared_ptr<ServiceEvents>& obj, int type) = 0;
 };

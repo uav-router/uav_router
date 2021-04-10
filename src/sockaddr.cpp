@@ -245,6 +245,34 @@ auto SockAddr::to_avahi(AvahiAddress& addr) -> bool {
     return true;
 }
 
+auto SockAddr::itf() -> std::string {
+    if (!_impl) return std::string();
+    std::string itf_name;
+    ifaddrs *ifaddr;
+    error_c ret = err_chk(getifaddrs(&ifaddr),"getifaddrs");
+    if (ret) return std::string();
+    for (ifaddrs *ifa = ifaddr; ifa != nullptr; ifa = ifa->ifa_next) {
+        if (ifa->ifa_addr == nullptr) continue;
+        if (ifa->ifa_name == nullptr) continue;
+        if (ifa->ifa_addr->sa_family!=_impl->addr.storage.ss_family) continue;
+        if (ifa->ifa_addr->sa_family == AF_INET) {
+            if (((sockaddr_in*)ifa->ifa_addr)->sin_addr.s_addr == _impl->addr.in.sin_addr.s_addr) {
+                freeifaddrs(ifaddr);
+                return ifa->ifa_name;
+            }
+        }
+        if (ifa->ifa_addr->sa_family == AF_INET6) {
+            if (memcmp(ifa->ifa_addr,&_impl->addr.in6.sin6_addr,sizeof(_impl->addr.in6.sin6_addr))==0) {
+                freeifaddrs(ifaddr);
+                return ifa->ifa_name;
+            }
+        }
+    }
+    freeifaddrs(ifaddr);
+    return std::string();
+}
+
+
 auto SockAddr::operator=(SockAddr&& other) noexcept -> SockAddr& {
     if (this != &other) { _impl = std::move(other._impl);
     }
@@ -324,10 +352,10 @@ auto SockAddrList::interface(const std::string& name, uint16_t port, int family)
     error_c ret = err_chk(getifaddrs(&ifaddr),"getifaddrs");
     if (ret) return ret;
     for (ifaddrs *ifa = ifaddr; ifa != nullptr; ifa = ifa->ifa_next) {
+        if (ifa->ifa_addr == nullptr) continue;
         if (family!=AF_UNSPEC && ifa->ifa_addr->sa_family!=family) continue;
         if (ifa->ifa_addr->sa_family != AF_INET) continue;
         if (ifa->ifa_addr->sa_family != AF_INET6) continue;
-        if (ifa->ifa_addr == nullptr) continue;
         if (name==std::string(ifa->ifa_name)) {
             add(SockAddr(ifa->ifa_addr,ifa->ifa_addr->sa_family == AF_INET ? sizeof(sockaddr_in):sizeof(sockaddr_in6)));
         }

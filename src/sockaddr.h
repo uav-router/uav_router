@@ -54,6 +54,7 @@ public:
   auto connect(int fd) ->error_c;
   auto accept(int fd) ->int;
   auto to_avahi(AvahiAddress& addr) -> bool;
+  auto itf() -> std::string;
 
   auto operator=(const SockAddr &other) -> SockAddr &;
   auto operator=(SockAddr &&other) noexcept -> SockAddr &;

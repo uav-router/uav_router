@@ -12,6 +12,7 @@
 // ---------------------------------
 class IOLoop  : public error_handler {
 public:
+    using OnEvent = std::function<void()>;
     // loop items
     virtual auto uart(const std::string& name) -> std::unique_ptr<UART> = 0;
     //virtual auto service_client(const std::string& name) -> std::unique_ptr<ServiceClient> = 0;
@@ -24,7 +25,7 @@ public:
     
     virtual void block_udev() = 0;
     virtual void block_zeroconf() = 0;
-    virtual void start_zeroconf() = 0;
+    virtual void zeroconf_ready(OnEvent func) = 0;
     
     // stats
     //virtual auto stats() -> StatHandler& = 0;

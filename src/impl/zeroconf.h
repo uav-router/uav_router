@@ -43,6 +43,10 @@ public:
                 aliases[name]=service.name;
             }
         });
+        _sb->on_complete([this](){
+            complete = true;
+            if (_on_complete) _on_complete();
+        });
         _sb->on_remove([this](CAvahiService service, AvahiLookupResultFlags flags) {
             log.info()<<"Remove service "<<service.name<<std::endl;
             auto it = _watches.before_begin();
@@ -71,14 +75,20 @@ public:
         _watches.push_front(obj);
     }
 
+    void on_complete(AvahiQuery::OnEvent func) {
+        _on_complete = func;
+    }
+
     std::map<SockAddr,std::string> names;
     std::map<std::string,std::string> aliases;
-
+    bool complete = false;
 private:
     std::unique_ptr<AvahiQuery> _sb;
     Avahi* _avahi;
     std::map<std::string,SockAddrList> _service;
     std::forward_list<std::weak_ptr<ServiceEvents>> _watches;
+    AvahiQuery::OnEvent _on_complete;
+    
     inline static Log::Log log {"svclistener"};
 };
 class AvahiImpl : public Avahi {
@@ -88,6 +98,15 @@ public:
         handler = AvahiHandler::create(&avahi_poll);
         _tcp = std::make_unique<ServiceListener>(this,"_pktstreamnames._tcp");
         _udp = std::make_unique<ServiceListener>(this,"_pktstreamnames._udp");
+        auto complete_func = [this]() {
+            if (_tcp->complete && _udp->complete && _on_ready) _on_ready();
+        };
+        _tcp->on_complete(complete_func);
+        _udp->on_complete(complete_func);
+    }
+    void on_ready(OnEvent func) override {
+        _on_ready = func;
+        if (_tcp->complete && _udp->complete) _on_ready();
     }
     auto query_service(CAvahiService pattern, AvahiLookupFlags flags=(AvahiLookupFlags)0) -> std::unique_ptr<AvahiQuery> override {
         return handler->query_service(pattern, flags);
@@ -130,6 +149,7 @@ public:
     std::unique_ptr<ServiceListener> _tcp;
     std::unique_ptr<ServiceListener> _udp;
     AvahiPoll avahi_poll;
+    OnEvent _on_ready;
 };
 
 #endif  //!__ZEROCONF_IMPL_H__

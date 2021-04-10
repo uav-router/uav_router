@@ -164,11 +164,11 @@ public:
         }
         SockAddr myaddr(_fd);
         _group = _loop->zeroconf()->get_register_group();
-        _group->on_create([this, port = myaddr.port()](AvahiGroup* g){ 
-            error_c ec = g->add_service(
-                CAvahiService(name,"_pktstreamnames._tcp"),
-                port
-            );
+        _group->on_create([this, port = myaddr.port(), family=myaddr.family(), itf = myaddr.itf()](AvahiGroup* g){
+            auto svc = CAvahiService(name,"_pktstreamnames._tcp").family(family);
+            if (!itf.empty()) { svc.itf(itf);
+            }
+            error_c ec = g->add_service(svc, port);
             if (ec) {
                 on_error(ec,"add service");
                 ec = g->reset();
@@ -186,7 +186,11 @@ public:
         });
         _group->on_established([this](AvahiGroup* g){ 
             log.info()<<"Service "<<name<<" registered"<<std::endl;
-            connect_to_peer_retry();
+            _timer->shoot([this](){ 
+                _timer->shoot([this](){ connect(); });
+                connect_to_peer_retry();
+             }).arm_oneshoot(500ms); // wait for service info propagation
+            
         });
         _group->on_failure([this](error_c ec){ 
             on_error(ec,"registration failure");

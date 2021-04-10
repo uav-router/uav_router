@@ -184,12 +184,13 @@ public:
         _block_zeroconf = true;
         if (_zeroconf) _zeroconf.reset();
     }
-
-    void start_zeroconf() override {
+    
+    void zeroconf_ready(OnEvent func) override {
         _block_zeroconf = false;
         if (!_zeroconf) {
             _zeroconf = std::make_unique<AvahiImpl>(this);
         }
+        _zeroconf->on_ready(func);
     }
 
     auto zeroconf() -> Avahi* override {
