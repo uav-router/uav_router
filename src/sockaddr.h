@@ -27,7 +27,7 @@ public:
   void init(in_addr_t address, uint16_t port);
   void init(in6_addr address, uint16_t port);
   
-  auto init(const std::string& address, uint16_t port = 0) -> bool;
+  auto init(const std::string& address, uint16_t port = 0) -> error_c;
   
   SockAddr(int fd);
   void init(int fd);
@@ -54,7 +54,7 @@ public:
   auto connect(int fd) ->error_c;
   auto accept(int fd) ->int;
   auto to_avahi(AvahiAddress& addr) -> bool;
-  auto itf() -> std::string;
+  auto itf(bool broadcast=false) -> std::string;
 
   auto operator=(const SockAddr &other) -> SockAddr &;
   auto operator=(SockAddr &&other) noexcept -> SockAddr &;
@@ -65,6 +65,7 @@ public:
   auto format(Format f) -> std::string;
 
   static auto any(int family, uint16_t port = 0) -> SockAddr;
+  static auto local(std::string itf_name, int family) -> SockAddr;
   friend auto operator<<(std::ostream &os, const SockAddr &addr) -> std::ostream&;
   friend auto operator<(const SockAddr& addr1, const SockAddr& addr2) -> bool;
 
@@ -86,5 +87,7 @@ public:
     auto interface(const std::string& name, uint16_t port, int family = AF_UNSPEC) -> error_c;
     auto broadcast(const std::string& name, uint16_t port) -> error_c;
 };
+
+extern auto itf_from_str(const std::string& name_or_idx) -> std::pair<std::string,int>;
 
 #endif  // __SOCKADDR_H__

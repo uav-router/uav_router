@@ -22,8 +22,10 @@
 #include "impl/uart.h"
 #include "impl/zeroconf.h"
 #include "impl/address.h"
+#include "sockaddr.h"
 #include "impl/tcpcli.h"
 #include "impl/tcpsvr.h"
+#include "impl/udpcli.h"
 
 
 //----------------------------------------

@@ -1,0 +1,286 @@
+#ifndef __UDPCLI__H__
+#define __UDPCLI__H__
+#include <sys/epoll.h>
+#include <sys/ioctl.h>
+
+#include <cstring>
+#include <map>
+#include <chrono>
+using namespace std::chrono_literals;
+
+#include "fd.h"
+#include "../err.h"
+#include "../loop.h"
+#include "../log.h"
+
+
+
+class UDPClientStream: public Client {
+public:
+    UDPClientStream(const std::string& name):_name(name) {}
+    
+    auto write(const void* , int) -> int override { return -1;
+    }
+
+    auto get_peer_name() -> const std::string& override {
+        return _name;
+    }
+
+    const std::string& _name;
+
+    friend class UdpClientImpl;
+};
+
+class UdpClientImpl : public UdpClient, public IOPollable {
+public:
+    UdpClientImpl(const std::string name, IOLoopSvc* loop):IOPollable(name),_loop(loop),_resolv(loop->address()),_timer(loop->timer()) {
+        //_timer->shoot([this](){ connect(); });
+        auto on_err = [this,name](error_c& ec){ on_error(ec,name);};
+        _resolv->on_error(on_err);
+        _timer->on_error(on_err);
+    }
+
+    ~UdpClientImpl() override {
+        _exists = false;
+        if (_fd != -1) {
+            _loop->poll()->del(_fd, this);
+            on_error(err_chk(close(_fd),"close"));
+            _fd = -1;
+        }
+    }
+
+    auto init(const std::string& host, uint16_t port, int family=AF_UNSPEC) -> error_c override {
+        if (_addr.init(host,port)) { return create(_addr.family(),SockAddr::any(family));
+        }
+        return _resolv->family(family).socktype(SOCK_DGRAM).protocol(IPPROTO_UDP)
+            .init(host, port, [this](SockAddrList&& a) {
+                SockAddrList addresses = std::move(a);
+                if (addresses.begin()!=addresses.end()) {
+                    auto family = addresses.begin()->family();
+                    error_c ec = create(family, SockAddr::any(family));
+                    on_error(ec);
+                }
+        });
+    }
+
+    auto init_broadcast(uint16_t port, const std::string& interface="") -> error_c override {
+        SockAddr local = SockAddr::any(AF_INET);
+        if (interface.empty()) { 
+            _addr.init("<broadcast>",port);
+        } else {
+            if (_addr.init(interface,port)) {
+                local = SockAddr::local(_addr.itf(true),AF_INET);
+            } else {
+                auto itf = itf_from_str(interface);
+                SockAddrList list;
+                list.broadcast(itf.first, port);
+                if (list.empty()) {
+                    log.warning()<<"No address found for interface "<<itf.first<<". Use global broadcast address"<<std::endl;
+                    _addr.init("<broadcast>",port);
+                } else if (std::next(list.begin())!=list.end()) {
+                    log.warning()<<"Multiple address found for interface "<<itf.first<<". Use global broadcast address"<<std::endl;
+                    _addr.init("<broadcast>",port);
+                } else {
+                    _addr = *list.begin();
+                    local = SockAddr::local(_addr.itf(true),AF_INET);
+                }
+            }
+            
+        }
+        return create(_addr.family(),local,true);
+    }
+
+    auto init_multicast(const std::string& address, uint16_t port, const std::string& interface="", uint8_t ttl = 0) -> error_c override {
+        error_c ret = _addr.init(address,port);
+        if (ret) {
+            ret.add_place("multicast address");
+            return ret;
+        }
+        ip_mreqn req;
+        memset(&req,0,sizeof(req));
+        SockAddr local;
+        if (interface.empty()) {
+            local = SockAddr::any(_addr.family());
+        } else {
+            std::string itf_name = interface;
+            SockAddr itf_addr;
+            if (itf_addr.init(interface)) {
+                if (_addr.family()!=itf_addr.family()) {
+                    return error_c(EAFNOSUPPORT, std::system_category(), "itf and multicast difference");
+                }
+                itf_name = itf_addr.itf();
+                if (itf_name.empty()) {
+                    return error_c(ENODEV, std::system_category(), "no itf with address");
+                }
+                local = itf_addr;
+            }
+            auto itf = itf_from_str(itf_name);
+            if (itf.second==0) {
+                errno_c ec("if_nametoindex");
+                return ec;
+            }
+            req.imr_ifindex = itf.second;
+            if (local.len()==0) {
+                local = SockAddr::local(itf.first, _addr.family());    
+            }
+        }
+        return create(_addr.family(),local,false,&req,ttl);
+    }
+    
+    auto create(int family, const SockAddr& local, bool broadcast = false, ip_mreqn* itf = nullptr, uint8_t ttl = 0) -> error_c {
+        FD watcher(_fd);
+        _fd = socket(family, SOCK_DGRAM | SOCK_NONBLOCK, 0);
+        if (_fd == -1) { return errno_c("udp client socket");
+        }
+        if (broadcast) {
+            int yes = 1;
+            errno_c ret = err_chk(setsockopt(_fd, SOL_SOCKET, SO_BROADCAST, (void *) &yes, sizeof(yes)),"setsockopt(broadcast)");
+            if (ret) return ret;
+        } else if (itf) { // multicast socket
+            if (ttl) {
+                errno_c ret = err_chk(setsockopt(_fd, IPPROTO_IP, IP_MULTICAST_TTL, (void *)&ttl, sizeof(ttl)),"multicast ttl");
+                if (ret) return ret;
+            }
+            if (family==AF_INET) {
+                if (itf->imr_address.s_addr!=htonl(INADDR_ANY) || itf->imr_ifindex) {
+                    errno_c ret = err_chk(setsockopt(_fd, IPPROTO_IP, IP_MULTICAST_IF, itf, sizeof(*itf)),"multicast itf");
+                    if (ret) return ret;
+                }
+            } else {
+                if (itf->imr_ifindex) {
+                    errno_c ret = err_chk(setsockopt(_fd, IPPROTO_IPV6, IPV6_MULTICAST_IF, &itf->imr_ifindex, sizeof(itf->imr_ifindex)),"multicast itf");
+                    if (ret) return ret;
+                }
+            }
+        }
+        if (_loop->zeroconf()) {
+            SockAddr local = SockAddr::any(_addr.family());
+            error_c ec = local.bind(_fd);
+            if (ec) return ec;
+            SockAddr myaddr(_fd);
+            _group = _loop->zeroconf()->get_register_group();
+            _group->on_create([this, port = myaddr.port(), family=myaddr.family(), itf = myaddr.itf()](AvahiGroup* g){
+                auto svc = CAvahiService(name,"_pktstreamnames._tcp").family(family);
+                if (!itf.empty()) { svc.itf(itf);
+                }
+                error_c ec = g->add_service(svc, port);
+                if (ec) {
+                    on_error(ec,"add service");
+                    ec = g->reset();
+                    on_error(ec,"reset service");
+                    ec = _loop->poll()->add(_fd, EPOLLIN | EPOLLOUT | EPOLLET, this);
+                    on_error(ec,"poll add create service reset");
+                } else {
+                    ec = g->commit();
+                    on_error(ec,"commit service");
+                }
+            });
+            _group->on_collision([this](AvahiGroup* g){ 
+                log.error()<<"Collision on endpoint name "<<name<<std::endl;
+                g->reset();
+                auto ec = _loop->poll()->add(_fd, EPOLLIN | EPOLLOUT | EPOLLET, this);
+                on_error(ec,"poll add collision");
+            });
+            _group->on_established([this](AvahiGroup* g){ 
+                log.info()<<"Service "<<name<<" registered"<<std::endl;
+                _timer->shoot([this](){ 
+                    auto ec = _loop->poll()->add(_fd, EPOLLIN | EPOLLOUT | EPOLLET, this);
+                    on_error(ec,"poll add established");
+                 }).arm_oneshoot(500ms); // wait for service info propagation
+                
+            });
+            _group->on_failure([this](error_c ec){ 
+                on_error(ec,"registration failure");
+                ec = _loop->poll()->add(_fd, EPOLLIN | EPOLLOUT | EPOLLET, this);
+                on_error(ec,"poll add failure");
+            });
+            _group->create();
+            watcher.clear();
+            return error_c();
+        }
+        auto ret = _loop->poll()->add(_fd, EPOLLIN | EPOLLOUT | EPOLLET, this);
+        if (ret) return ret;
+        watcher.clear();
+        return error_c();
+    }
+    auto epollIN() -> int override {
+        while(true) {
+            int sz;
+            errno_c ret = err_chk(ioctl(_fd, FIONREAD, &sz),"udp ioctl");
+            if (ret) {
+                on_error(ret, "Query datagram size error");
+            } else {
+                if (sz==0) { 
+                    break;
+                }
+                void* buffer = alloca(sz);
+                SockAddr addr;
+                ssize_t n = recvfrom(_fd, buffer, sz, 0, addr.sock_addr(), &addr.size());
+                if (n<0) {
+                    errno_c ret;
+                    if (ret != std::error_condition(std::errc::resource_unavailable_try_again)) {
+                        on_error(ret, "udp recvfrom");
+                    } else break;
+                } else {
+                    if (n != sz) {
+                        log.warning()<<"Datagram declared size "<<sz<<" is differ than read "<<n<<std::endl;
+                    }
+                    std::string name;
+                    if (_loop->zeroconf()) {
+                        name = _loop->zeroconf()->query_service_name(addr, SOCK_DGRAM).first;
+                    }
+                    if (name.empty()) {
+                        name = addr.format(SockAddr::REG_SERVICE);
+                    }
+                    auto& stream = _streams[name];
+                    if (stream.expired()) {
+                        auto cli = std::make_shared<UDPClientStream>(name);
+                        stream = cli;
+                        on_connect(cli,name);
+                        if (!_exists) return STOP;
+                    }
+                    dynamic_cast<UDPClientStream*>(stream.lock().get())->on_read(buffer, n);
+                    if (!_exists) return STOP;
+                }
+            }
+        }
+        return HANDLED;
+    }
+    auto epollOUT() -> int override {
+        writeable();
+        if (!_exists) return STOP;
+        return HANDLED;
+    }
+
+    auto write(const void* buf, int len) -> int override {
+        if (!_is_writeable) {
+            return -1;
+        }
+        int ret = sendto(_fd, buf, len, 0, _addr.sock_addr(), _addr.len());
+        if (ret==-1) {
+            errno_c err;
+            on_error(err, "UDP send datagram");
+            _is_writeable=false;
+        } else if (ret != len) {
+            log.error()<<"Partial send "<<ret<<" from "<<len<<" bytes"<<std::endl;
+        }
+        return ret;
+    }
+
+private:
+    SockAddr _addr;
+    int _fd = -1;
+    bool _exists = true;
+    enum Mode {
+        ORDINAL,BROADCAST,MULTICAST
+    };
+    Mode _mode = ORDINAL;
+    IOLoopSvc* _loop;
+    std::unique_ptr<AddressResolver> _resolv;
+    std::unique_ptr<Timer> _timer;
+    std::unique_ptr<AvahiGroup> _group;
+    std::map<std::string, std::weak_ptr<UDPClientStream>> _streams;
+    inline static Log::Log log {"udpclient"};
+};
+
+#endif  //!__UDPCLI__H__

@@ -6,6 +6,7 @@
 #include <ifaddrs.h>
 #include <net/if.h>
 #include <sys/socket.h>
+#include <utility>
 #include "log.h"
 #include "sockaddr.h"
 
@@ -121,44 +122,44 @@ void SockAddr::init(in6_addr address, uint16_t port) {
     _impl->length = sizeof(sockaddr_in6);
 }
 
-auto SockAddr::init(const std::string& address, uint16_t port) -> bool {
+auto SockAddr::init(const std::string& address, uint16_t port) -> error_c {
     if (!_impl) _impl = std::make_unique<SockAddrImpl>();
     _impl->length = 0;
     if (address.empty()) {
         init(INADDR_ANY,port);
-        return true;
+        return error_c();
     }
     if (address=="<loopback>") {
         init(INADDR_LOOPBACK,port);
-        return true;
+        return error_c();
     }
     if (address=="<broadcast>") {
         init(INADDR_BROADCAST,port);
-        return true;
+        return error_c();
     }
     if (address=="<any6>") {
         init(in6addr_any,port);
-        return true;
+        return error_c();
     }
     if (address=="<loopback6>") {
         init(in6addr_loopback,port);
-        return true;
+        return error_c();
     }
     int ret = inet_pton(AF_INET,address.c_str(),&_impl->addr.in.sin_addr);
     if (ret) {
         _impl->length = sizeof(sockaddr_in);
         _impl->addr.in.sin_family = AF_INET;
         _impl->addr.in.sin_port = htons(port);
-        return true;
+        return error_c();
     }
     ret = inet_pton(AF_INET6,address.c_str(),&_impl->addr.in6.sin6_addr);
     if (ret) {
         _impl->length = sizeof(sockaddr_in6);
         _impl->addr.in6.sin6_family = AF_INET6;
         _impl->addr.in6.sin6_port = htons(port);
-        return true;
+        return error_c();
     }
-    return false;
+    return errno_c();
 }
 
 auto SockAddr::sock_addr() -> struct sockaddr* {
@@ -245,7 +246,7 @@ auto SockAddr::to_avahi(AvahiAddress& addr) -> bool {
     return true;
 }
 
-auto SockAddr::itf() -> std::string {
+auto SockAddr::itf(bool broadcast) -> std::string {
     if (!_impl) return std::string();
     std::string itf_name;
     ifaddrs *ifaddr;
@@ -255,8 +256,14 @@ auto SockAddr::itf() -> std::string {
         if (ifa->ifa_addr == nullptr) continue;
         if (ifa->ifa_name == nullptr) continue;
         if (ifa->ifa_addr->sa_family!=_impl->addr.storage.ss_family) continue;
+        if (broadcast && ifa->ifa_addr->sa_family!=AF_INET && !(ifa->ifa_flags | IFF_BROADCAST)) continue;
         if (ifa->ifa_addr->sa_family == AF_INET) {
-            if (((sockaddr_in*)ifa->ifa_addr)->sin_addr.s_addr == _impl->addr.in.sin_addr.s_addr) {
+            if (broadcast) {
+                if (((sockaddr_in*)ifa->ifa_broadaddr)->sin_addr.s_addr == _impl->addr.in.sin_addr.s_addr) {
+                    freeifaddrs(ifaddr);
+                    return ifa->ifa_name;
+                }
+            } else if (((sockaddr_in*)ifa->ifa_addr)->sin_addr.s_addr == _impl->addr.in.sin_addr.s_addr) {
                 freeifaddrs(ifaddr);
                 return ifa->ifa_name;
             }
@@ -389,4 +396,23 @@ SockAddrList::SockAddrList(addrinfo *ai) {
 
 SockAddrList::SockAddrList(const SockAddr& addr) {
     add(addr);
+}
+
+auto itf_from_str(const std::string& name_or_idx) -> std::pair<std::string,int> {
+    int itf_idx = if_nametoindex(name_or_idx.c_str());
+    if (itf_idx!=0) return std::make_pair(name_or_idx, itf_idx);
+    itf_idx = strtol(name_or_idx.c_str(),nullptr,10);
+    if (itf_idx==0) return std::make_pair(std::string(), 0);
+    std::array<char,IF_NAMESIZE> ifn;
+    if (!if_indextoname(itf_idx,ifn.data()))  return std::make_pair(std::string(), 0);
+    return std::make_pair(std::string(ifn.data()), itf_idx);
+}
+
+auto SockAddr::local(std::string itf_name, int family) -> SockAddr {
+    if (itf_name.empty()) return SockAddr::any(family);
+    SockAddrList list;
+    list.interface(itf_name,0,family);
+    if (list.empty()) return SockAddr::any(family);
+    if (std::next(list.begin())!=list.end()) return SockAddr::any(family);
+    return *list.begin();
 }

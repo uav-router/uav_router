@@ -141,8 +141,8 @@ public:
     //TcpServer
     auto init(uint16_t port = 0, int family = AF_INET) -> error_c override {
         if (!_address.empty()) {
-            bool valid = _addr.init(_address, port);
-            if (!valid) {
+            error_c ec = _addr.init(_address, port);
+            if (ec) {
                 return _resolv->family(family).socktype(SOCK_STREAM).protocol(IPPROTO_TCP).add_flags(AI_PASSIVE)
                     .init(_address, port, [this,family,port](SockAddrList&& a) {
                         SockAddrList addrlist = std::move(a);

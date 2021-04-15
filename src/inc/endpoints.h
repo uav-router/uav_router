@@ -81,11 +81,11 @@ public:
     virtual auto init(const std::string& service_name, const std::string& interface="") -> error_c = 0;
 };
 
-class UdpClient: public StreamSource {
+class UdpClient: public StreamSource, public Writeable {
 public:
-    virtual auto init(const std::string& host, uint16_t port) -> error_c = 0;
+    virtual auto init(const std::string& host, uint16_t port, int family=AF_UNSPEC) -> error_c = 0;
     virtual auto init_broadcast(uint16_t port, const std::string& interface="") -> error_c = 0;
-    virtual auto init_multicast(const std::string& address, uint16_t port, const std::string& interface="", int ttl = 0) -> error_c = 0;
+    virtual auto init_multicast(const std::string& address, uint16_t port, const std::string& interface="", uint8_t ttl = 0) -> error_c = 0;
 };
 
 class TcpServer:  public StreamSource {
