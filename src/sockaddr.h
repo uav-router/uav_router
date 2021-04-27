@@ -46,6 +46,7 @@ public:
   auto family() -> int;
   
   auto ip4_addr_t() -> in_addr_t;
+  auto ip6_addr() -> uint8_t*;
   
   auto port() -> uint16_t;
   void set_port(uint16_t port);
@@ -62,10 +63,11 @@ public:
     REG_SERVICE,
     IPADDR_ONLY
   };
-  auto format(Format f) -> std::string;
+  auto format(Format f, const std::string& suffix = "") -> std::string;
 
   static auto any(int family, uint16_t port = 0) -> SockAddr;
-  static auto local(std::string itf_name, int family) -> SockAddr;
+  static auto local(std::string itf_name, int family=AF_INET, uint16_t port = 0) -> SockAddr;
+  static auto broadcast(std::string itf_name, uint16_t port = 0) -> SockAddr;
   friend auto operator<<(std::ostream &os, const SockAddr &addr) -> std::ostream&;
   friend auto operator<(const SockAddr& addr1, const SockAddr& addr2) -> bool;
 

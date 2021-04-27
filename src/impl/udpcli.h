@@ -44,6 +44,11 @@ public:
         _exists = false;
         if (_fd != -1) {
             _loop->poll()->del(_fd, this);
+            for (auto& stream : _streams) {
+                auto cli = stream.second.lock();
+                if (cli) { cli->on_close();
+                }
+            }
             on_error(err_chk(close(_fd),"close"));
             _fd = -1;
         }
@@ -137,16 +142,21 @@ public:
             errno_c ret = err_chk(setsockopt(_fd, SOL_SOCKET, SO_BROADCAST, (void *) &yes, sizeof(yes)),"setsockopt(broadcast)");
             if (ret) return ret;
         } else if (itf) { // multicast socket
-            if (ttl) {
-                errno_c ret = err_chk(setsockopt(_fd, IPPROTO_IP, IP_MULTICAST_TTL, (void *)&ttl, sizeof(ttl)),"multicast ttl");
-                if (ret) return ret;
-            }
             if (family==AF_INET) {
+                if (ttl) {
+                    errno_c ret = err_chk(setsockopt(_fd, IPPROTO_IP, IP_MULTICAST_TTL, (void *)&ttl, sizeof(ttl)),"multicast ttl");
+                    if (ret) return ret;
+                }
                 if (itf->imr_address.s_addr!=htonl(INADDR_ANY) || itf->imr_ifindex) {
                     errno_c ret = err_chk(setsockopt(_fd, IPPROTO_IP, IP_MULTICAST_IF, itf, sizeof(*itf)),"multicast itf");
                     if (ret) return ret;
                 }
             } else {
+                if (ttl) {
+                    errno_c ret = err_chk(setsockopt(_fd, IPPROTO_IPV6, IPV6_MULTICAST_HOPS, (void *)&ttl, sizeof(ttl)),"multicast ttl");
+                    if (ret) return ret;
+                }
+                
                 if (itf->imr_ifindex) {
                     errno_c ret = err_chk(setsockopt(_fd, IPPROTO_IPV6, IPV6_MULTICAST_IF, &itf->imr_ifindex, sizeof(itf->imr_ifindex)),"multicast itf");
                     if (ret) return ret;
@@ -271,10 +281,6 @@ private:
     SockAddr _addr;
     int _fd = -1;
     bool _exists = true;
-    enum Mode {
-        ORDINAL,BROADCAST,MULTICAST
-    };
-    Mode _mode = ORDINAL;
     IOLoopSvc* _loop;
     std::unique_ptr<AddressResolver> _resolv;
     std::unique_ptr<Timer> _timer;

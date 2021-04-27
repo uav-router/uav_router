@@ -1,5 +1,6 @@
 #include <avahi-common/address.h>
 #include <cstring>
+#include <netinet/in.h>
 #include <sstream>
 #include <linux/if_link.h>
 #include <arpa/inet.h>
@@ -198,6 +199,12 @@ auto SockAddr::ip4_addr_t() -> in_addr_t {
     return _impl->addr.in.sin_addr.s_addr;
 }
 
+auto SockAddr::ip6_addr() -> uint8_t* {
+    if (!_impl) return nullptr;
+    if (_impl->addr.storage.ss_family!=AF_INET6) return nullptr;
+    return _impl->addr.in6.sin6_addr.s6_addr;
+}
+
 auto SockAddr::port() -> uint16_t {
     if (!_impl) return 0;
     if (_impl->addr.storage.ss_family==AF_INET) return ntohs(_impl->addr.in.sin_port);
@@ -303,21 +310,21 @@ auto operator<(const SockAddr& addr1, const SockAddr& addr2) -> bool {
     return bool(addr1._impl);
 }
 
-auto SockAddr::format(Format f) -> std::string {
+auto SockAddr::format(Format f, const std::string& suffix) -> std::string {
     std::stringstream fmt;
     if (_impl) {
         if (_impl->length) {
             if (_impl->addr.storage.ss_family==AF_INET) {
-                std::array<char,256> buf;
+                std::array<char,INET_ADDRSTRLEN> buf;
                 if (f == REG_SERVICE) {
-                    fmt<<ntohs(_impl->addr.in.sin_port)<<"."<<inet_ntop(AF_INET, &_impl->addr.in.sin_addr,buf.data(),buf.size());
+                    fmt<<ntohs(_impl->addr.in.sin_port)<<"-"<<inet_ntop(AF_INET, &_impl->addr.in.sin_addr,buf.data(),buf.size())<<suffix;
                 } else if (f == IPADDR_ONLY) {
                     fmt<<inet_ntop(AF_INET, &_impl->addr.in.sin_addr,buf.data(),buf.size());
                 }
             } else if (_impl->addr.storage.ss_family==AF_INET6) {
-                std::array<char,256> buf;
+                std::array<char,INET6_ADDRSTRLEN> buf;
                 if (f == REG_SERVICE) {
-                    fmt<<ntohs(_impl->addr.in6.sin6_port)<<"."<<inet_ntop(AF_INET6, &_impl->addr.in6.sin6_addr,buf.data(),buf.size());
+                    fmt<<ntohs(_impl->addr.in6.sin6_port)<<"-"<<inet_ntop(AF_INET6, &_impl->addr.in6.sin6_addr,buf.data(),buf.size())<<suffix;
                 } else if (f == IPADDR_ONLY) {
                     fmt<<inet_ntop(AF_INET6, &_impl->addr.in6.sin6_addr,buf.data(),buf.size());
                 }
@@ -408,11 +415,20 @@ auto itf_from_str(const std::string& name_or_idx) -> std::pair<std::string,int> 
     return std::make_pair(std::string(ifn.data()), itf_idx);
 }
 
-auto SockAddr::local(std::string itf_name, int family) -> SockAddr {
+auto SockAddr::local(std::string itf_name, int family, uint16_t port) -> SockAddr {
     if (itf_name.empty()) return SockAddr::any(family);
     SockAddrList list;
-    list.interface(itf_name,0,family);
-    if (list.empty()) return SockAddr::any(family);
+    list.interface(itf_name,port,family);
+    if (list.empty()) return SockAddr::any(family,port);
     if (std::next(list.begin())!=list.end()) return SockAddr::any(family);
+    return *list.begin();
+}
+
+auto SockAddr::broadcast(std::string itf_name, uint16_t port) -> SockAddr {
+    if (itf_name.empty()) return SockAddr::any(AF_INET);
+    SockAddrList list;
+    list.broadcast(itf_name,port);
+    if (list.empty()) return SockAddr::any(AF_INET);
+    if (std::next(list.begin())!=list.end()) return SockAddr::any(AF_INET);
     return *list.begin();
 }

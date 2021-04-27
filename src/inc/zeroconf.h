@@ -14,6 +14,7 @@ public:
     virtual void on_ready(OnEvent func) = 0;
     virtual auto query_service_name(SockAddr& addr, int type) -> std::pair<std::string,std::string> = 0;
     virtual void watch_services(std::shared_ptr<ServiceEvents>& obj, int type) = 0;
+    virtual auto port_claimed(uint16_t port, SockAddr& addr) -> bool = 0;
 };
 
 #endif  //!__ZEROCONF_INC_H__

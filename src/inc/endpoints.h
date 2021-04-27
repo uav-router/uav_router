@@ -45,7 +45,7 @@ public:
     virtual ~Closeable() = default;
     void on_close(OnEventFunc func) {_on_close = func;}
 protected:
-    void on_close() { if (_on_close) _on_close(); }
+    virtual void on_close() { if (_on_close) _on_close(); }
 private:
     OnEventFunc _on_close;
 };
@@ -98,15 +98,13 @@ public:
 
 class UdpServer:  public StreamSource {
 public:
+    enum Mode { UNICAST, BROADCAST, MULTICAST };
+    virtual auto address(const std::string& address) -> UdpServer& = 0;
     virtual auto interface(const std::string& interface) -> UdpServer& = 0;
-    virtual auto service_port_range(uint16_t port_min, uint16_t port_max) -> UdpServer& = 0;
-    virtual auto ttl(int ttl_) -> TcpServer& = 0;
-    virtual auto address(const std::string& address) -> TcpServer& = 0;
-    virtual auto broadcast() -> TcpServer& = 0;
-    virtual auto multicast() -> TcpServer& = 0;
+    virtual auto service_port_range(uint16_t min, uint16_t max) -> UdpServer& = 0;
+    virtual auto ttl(uint8_t ttl_) -> UdpServer& = 0;
 
-    virtual auto init(uint16_t port) -> error_c = 0;
-    virtual auto init_service(const std::string& service_name) -> error_c = 0;
+    virtual auto init(uint16_t port=0, Mode mode = UNICAST) -> error_c = 0;
 };
 
 #endif //__ENDPOINTS_H__

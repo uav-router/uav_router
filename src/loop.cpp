@@ -26,6 +26,7 @@
 #include "impl/tcpcli.h"
 #include "impl/tcpsvr.h"
 #include "impl/udpcli.h"
+#include "impl/udpsvr.h"
 
 
 //----------------------------------------
@@ -50,11 +51,15 @@ public:
     auto tcp_client(const std::string& name) -> std::unique_ptr<TcpClient> override {
         return std::make_unique<TcpClientImpl>(name,this);
     }
-    //auto udp_client(const std::string& name) -> std::unique_ptr<UdpClient> override {}
+    auto udp_client(const std::string& name) -> std::unique_ptr<UdpClient> override {
+        return std::make_unique<UdpClientImpl>(name,this);
+    }
     auto tcp_server(const std::string& name) -> std::unique_ptr<TcpServer> override {
         return std::make_unique<TcpServerImpl>(name,this);
     }
-    //auto udp_server(const std::string& name) -> std::unique_ptr<UdpServer> override {}
+    auto udp_server(const std::string& name) -> std::unique_ptr<UdpServer> override {
+        return std::make_unique<UdpServerImpl>(name,this);
+    }
     // stats
     //auto stats() -> StatHandler& override {}
     // run

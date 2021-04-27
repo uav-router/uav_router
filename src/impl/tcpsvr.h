@@ -139,7 +139,7 @@ public:
         cleanup();
     }
     //TcpServer
-    auto init(uint16_t port = 0, int family = AF_INET) -> error_c override {
+    auto init(uint16_t port, int family) -> error_c override {
         if (!_address.empty()) {
             error_c ec = _addr.init(_address, port);
             if (ec) {

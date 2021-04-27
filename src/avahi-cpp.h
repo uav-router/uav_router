@@ -37,6 +37,10 @@ struct CAvahiService {
         }
         return *this;
     }
+    auto itf(int if_idx) -> CAvahiService& {
+        interface = if_idx;
+        return *this;
+    }
     auto itf() -> std::string {
         return if_indextoname(interface,(char*)alloca(IF_NAMESIZE));
     }

@@ -1,3 +1,4 @@
+#include <netinet/in.h>
 #include <stdio.h>      /* for printf() and fprintf() */
 #include <sys/socket.h> /* for socket(), connect(), sendto(), and recvfrom() */
 #include <arpa/inet.h>  /* for sockaddr_in and inet_addr() */
@@ -9,14 +10,15 @@
 #define MAXRECVSTRING 255  /* Longest string to receive */
 
 
-void print_addr(const struct sockaddr *sa, socklen_t salen) {
+void print_addr(const struct sockaddr *sa, socklen_t salen, const char* prefix = nullptr) {
     char host[NI_MAXHOST];
     char port[NI_MAXSERV];
     int ec = getnameinfo(sa, salen, host, sizeof(host), port, sizeof(port), NI_NUMERICHOST | NI_NUMERICSERV);
     if (ec) {
        std::cout<<"Get nameinfo error: "<<ec<<" family="<<sa->sa_family<<" len="<<salen<<std::endl;
     } else {
-        std::cout<<"address = "<<host<<":"<<port<<std::endl;
+        if (prefix) std::cout<<prefix;
+        std::cout<<" address = "<<host<<":"<<port<<std::endl;
     }
 }
 
@@ -55,13 +57,21 @@ int main(int argc, char *argv[])
     /* Construct bind structure */
     memset(&broadcastAddr, 0, sizeof(broadcastAddr));   /* Zero out structure */
     broadcastAddr.sin_family = AF_INET;                 /* Internet address family */
-    broadcastAddr.sin_addr.s_addr = htonl(INADDR_ANY);//inet_addr("192.168.0.255"); //inet_addr("192.168.0.131");inet_addr("172.17.0.1")  /* Any incoming interface */
+    broadcastAddr.sin_addr.s_addr = htonl(INADDR_BROADCAST);//inet_addr("192.168.0.255"); //inet_addr("192.168.0.131");inet_addr("172.17.0.1")  /* Any incoming interface */
     broadcastAddr.sin_port = htons(broadcastPort);      /* Broadcast port */
 
     /* Bind to the broadcast port */
     if (bind(sock, (struct sockaddr *) &broadcastAddr, sizeof(broadcastAddr)) < 0)
         DieWithError("bind() failed");
 
+    struct sockaddr_in actualAddr;
+    socklen_t actualLen = sizeof(actualAddr);
+    int ret = getsockname(sock,(sockaddr*)&actualAddr, &actualLen);
+    if (ret) {
+        perror("getsockname");
+    } else {
+        print_addr((sockaddr *) &actualAddr, actualLen, "Actual");
+    }
     for(;;) {
     /* Receive a single datagram from the server */
     sockaddr_storage client_addr;
