@@ -34,7 +34,11 @@ public:
     void writeable(OnEventFunc func) {_writeable = func;}
     auto is_writeable() -> bool { return _is_writeable; }
 protected:
-    void writeable() {if (_writeable) _writeable(); _is_writeable = true;}
+    void writeable() {
+        if (_is_writeable) return;
+        _is_writeable = true;
+        if (_writeable) _writeable(); 
+    }
     bool _is_writeable = false;
 private:
     OnEventFunc _writeable;

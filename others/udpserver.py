@@ -1,5 +1,5 @@
 import socket
-localIP     = "192.168.4.118"
+localIP     = "192.168.4.119"
 localPort   = 20001
 bufferSize  = 1024
 msgFromServer       = "Hello UDP Client"

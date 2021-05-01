@@ -180,6 +180,7 @@ public:
                     on_error(ec,"reset service");
                     ec = _loop->poll()->add(_fd, EPOLLIN | EPOLLOUT | EPOLLET, this);
                     on_error(ec,"poll add create service reset");
+                    writeable();
                 } else {
                     ec = g->commit();
                     on_error(ec,"commit service");
@@ -211,6 +212,7 @@ public:
         auto ret = _loop->poll()->add(_fd, EPOLLIN | EPOLLOUT | EPOLLET, this);
         if (ret) return ret;
         watcher.clear();
+        writeable();
         return error_c();
     }
     auto epollIN() -> int override {
