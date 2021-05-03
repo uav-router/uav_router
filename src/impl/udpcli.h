@@ -168,9 +168,13 @@ public:
             error_c ec = local.bind(_fd);
             if (ec) return ec;
             SockAddr myaddr(_fd);
-            _group = _loop->zeroconf()->get_register_group();
+            if (!_group) {
+                _group = _loop->zeroconf()->get_register_group();
+            } else {
+                _group->reset();
+            }
             _group->on_create([this, port = myaddr.port(), family=myaddr.family(), itf = myaddr.itf()](AvahiGroup* g){
-                auto svc = CAvahiService(name,"_pktstreamnames._tcp").family(family);
+                auto svc = CAvahiService(name,"_pktstreamnames._udp").family(family);
                 if (!itf.empty()) { svc.itf(itf);
                 }
                 error_c ec = g->add_service(svc, port);
@@ -239,7 +243,7 @@ public:
                     }
                     std::string name;
                     if (_loop->zeroconf()) {
-                        name = _loop->zeroconf()->query_service_name(addr, SOCK_DGRAM).first;
+                        name = _loop->zeroconf()->query_service_name(addr, SOCK_DGRAM).second;
                     }
                     if (name.empty()) {
                         name = addr.format(SockAddr::REG_SERVICE);

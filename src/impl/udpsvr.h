@@ -7,6 +7,7 @@
 #include <random>
 #include <map>
 #include <cstring>
+#include <sys/socket.h>
 
 #include "fd.h"
 #include "../err.h"
@@ -17,11 +18,17 @@ std::default_random_engine reng(std::random_device{}());
 
 class UDPServerStream: public Client {
 public:
-    UDPServerStream(const std::string& name, int fd, SockAddr addr):_name(name),_fd(fd), _addr(std::move(addr)) {}
+    UDPServerStream(const std::string& name, int fd, SockAddr addr):_name(name),_fd(fd), _addr(std::move(addr)) {
+        writeable();
+    }
     
     auto write(const void* buf, int len) -> int override { 
-        if (!_is_writeable) return -1;
-        if (_fd==-1) return -1;
+        if (!_is_writeable) {
+            return -1;
+        }
+        if (_fd==-1) {
+            return -1;
+        }
         int ret = sendto(_fd, buf, len, 0, _addr.sock_addr(), _addr.len());
         if (ret==-1) {
             errno_c err;
@@ -50,7 +57,7 @@ public:
     friend class UdpServerImpl;
 };
 
-class UdpServerImpl : public UdpServer, public IOPollable {
+class UdpServerImpl : public UdpServer, public IOPollable, public ServiceEvents {
 public:
     UdpServerImpl(const std::string name, IOLoopSvc* loop):IOPollable(name),_loop(loop) {
     }
@@ -187,6 +194,7 @@ public:
             if (ret) return ret;
             if (addr.family()==AF_INET) {
                 ip_mreqn mreq;
+                memset(&mreq,0,sizeof(mreq));
                 mreq.imr_multiaddr.s_addr = addr.ip4_addr_t();
                 mreq.imr_ifindex = _itf.second;
                 ret = err_chk(setsockopt(_fd, IPPROTO_IP, IP_ADD_MEMBERSHIP, &mreq, sizeof(mreq)),"add membership");
@@ -204,10 +212,9 @@ public:
     }
 
     void register_service(AvahiGroup* g, uint16_t port, int family, const std::string& name, std::initializer_list<std::pair<std::string,std::string>> txt = {}) {
-        error_c ec = g->add_service(
-            CAvahiService(name,"_pktstreamnames._udp").family(family).itf(_itf.second),
-            port, "", txt 
-        );
+        auto svc = CAvahiService(name,"_pktstreamnames._udp").family(family);
+        if (_itf.second) svc.itf(_itf.second);
+        error_c ec = g->add_service(svc, port, "", txt);
         if (on_error(ec)) { ec = g->reset();
         } else {            ec = g->commit();
         }
@@ -250,7 +257,6 @@ public:
             on_error(ec);
         });
         _group->on_established([this](AvahiGroup* g){
-            log.info()<<"Service registered"<<std::endl;
             error_c ret = _loop->poll()->add(_fd, EPOLLIN | EPOLLOUT | EPOLLET, this);
             on_error(ret);
         });
@@ -264,6 +270,10 @@ public:
             on_error(ret);
         });
         _group->create();
+        if (!_service_pollable) {
+            _service_pollable = std::make_shared<ServicePollableProxy>(this);
+            _loop->zeroconf()->watch_services(_service_pollable, SOCK_DGRAM);
+        }
         return error_c();
     }
     auto epollIN() -> int override {
@@ -319,6 +329,20 @@ public:
         }
         return HANDLED;
     }
+
+    void svc_resolved(std::string name, std::string endpoint, const SockAddr& addr) override {
+    }
+    void svc_removed(std::string name) override {
+        // we have to close client stream when the service gone
+        auto stream_it = _streams.find(name);
+        if (stream_it!=_streams.end()) {
+            auto cli = stream_it->second.lock();
+            if (cli) { 
+                cli->on_close(); 
+                _streams.erase(name);
+            }
+        }
+    }
     
 private:
     std::string _address;
@@ -331,6 +355,7 @@ private:
     IOLoopSvc* _loop;
     std::map<std::string, std::weak_ptr<UDPServerStream>> _streams;
     std::unique_ptr<AvahiGroup> _group;
+    std::shared_ptr<ServiceEvents> _service_pollable;
     inline static Log::Log log {"udpserver"};
 };
 

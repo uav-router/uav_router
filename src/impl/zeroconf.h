@@ -26,7 +26,6 @@ public:
             } else {
                 svcptr->second.push_front(addr);
             }
-            log.info()<<"New service "<<service.name<<" "<<addr.format(SockAddr::REG_SERVICE)<<std::endl;
             std::string name;
             for(auto& rec: txt) {
                 if (rec.first=="endpoint") name = rec.second;
@@ -37,6 +36,7 @@ public:
                 names[addr]=name;
                 aliases[name]=service.name;
             }
+            log.info()<<"New service "<<service.name<<" "<<addr.format(SockAddr::REG_SERVICE)<<std::endl;
             if (_check_ports) {
                 std::regex rex("^([\\d]+)-(.*?)-claim$");
                 std::smatch result;

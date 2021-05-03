@@ -8,6 +8,19 @@ public:
     virtual void svc_resolved(std::string name, std::string endpoint, const SockAddr& addr) = 0;
     virtual void svc_removed(std::string name) = 0;
 };
+
+class ServicePollableProxy:public ServiceEvents {
+public:
+    ServicePollableProxy(ServiceEvents* obj):_obj(obj) {}
+    void svc_resolved(std::string name, std::string endpoint, const SockAddr& addr) override {
+        _obj->svc_resolved(name,endpoint,addr);
+    }
+    void svc_removed(std::string name) override {
+        _obj->svc_removed(name);
+    }
+private:
+    ServiceEvents* _obj;
+};
 class Avahi : public AvahiHandler {
 public:
     using OnEvent = AvahiQuery::OnEvent;

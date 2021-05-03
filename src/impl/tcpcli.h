@@ -41,18 +41,6 @@ public:
 };
 
 class TcpClientImpl : public TcpClient, public IOPollable, public ServiceEvents {
-    class ServicePollableProxy:public ServiceEvents {
-    public:
-        ServicePollableProxy(ServiceEvents* obj):_obj(obj) {}
-        void svc_resolved(std::string name, std::string endpoint, const SockAddr& addr) override {
-            _obj->svc_resolved(name,endpoint,addr);
-        }
-        void svc_removed(std::string name) override {
-            _obj->svc_removed(name);
-        }
-    private:
-        ServiceEvents* _obj;
-    };
 public:
     TcpClientImpl(const std::string name, IOLoopSvc* loop):IOPollable(name),_loop(loop),_resolv(loop->address()),_timer(loop->timer()) {
         _timer->shoot([this](){ connect(); });

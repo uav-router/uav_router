@@ -305,9 +305,10 @@ auto operator<(const SockAddr& addr1, const SockAddr& addr2) -> bool {
     if (!addr1._impl && !addr2._impl) return true;
     if (addr1._impl && addr2._impl) {
         if (addr1._impl->length != addr2._impl->length) return addr1._impl->length < addr2._impl->length;
-        return memcmp(&addr1._impl->addr,&addr2._impl->addr,addr1._impl->length)<0;
+        auto ret = memcmp(&addr1._impl->addr,&addr2._impl->addr,addr1._impl->length)<0;
+        return ret;
     }
-    return bool(addr1._impl);
+    return false;
 }
 
 auto SockAddr::format(Format f, const std::string& suffix) -> std::string {

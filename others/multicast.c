@@ -30,8 +30,8 @@ main(int argc, char **)
     socklen_t addrlen;
     struct ip_mreq mreq;
     char message[50];
-    auto interface_address = inet_addr("192.168.4.118");
-    //auto interface_address = htonl(INADDR_ANY);
+    //auto interface_address = inet_addr("192.168.4.118");
+    auto interface_address = htonl(INADDR_ANY);
 
     /* set up socket */
     sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);

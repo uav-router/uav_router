@@ -46,8 +46,8 @@ void test(const std::string& addr, int port, UdpServer::Mode mode = UdpServer::U
         std::cout<<"Client create"<<std::endl;
         switch(mode) {
         case UdpServer::UNICAST: cli->init(addr,port); break;
-        case UdpServer::BROADCAST: cli->init_broadcast(port); //TODO: specify interface
-        case UdpServer::MULTICAST: cli->init_multicast(addr, port); //TODO: specify interface and ttl
+        case UdpServer::BROADCAST: cli->init_broadcast(port); break;//TODO: specify interface
+        case UdpServer::MULTICAST: cli->init_multicast(addr, port); break;//TODO: specify interface and ttl
         }
     });
     loop->run();
@@ -61,38 +61,42 @@ void svr(int port, const std::string& addr="", UdpServer::Mode mode = UdpServer:
         return;
     }
     auto svr = loop->udp_server("UdpServer");
-    {
-        std::shared_ptr<Client> endpoint;
-        svr->on_connect([&endpoint](std::shared_ptr<Client> cli, std::string name){
-            endpoint = cli;
-            endpoint->on_close([name, &endpoint](){
-                std::cout<<"Close "<<name<<std::endl;
-                //endpoint.reset();
-            });
-            endpoint->on_read([name, &endpoint](void* buf, int len){
-                std::cout<<"Server "<<name<<" read ("<<len<<"): ";
-                std::cout.write((char*)buf,len);
-                std::cout<<std::endl;
-                std::string msg = "Hello, client!";
-                endpoint->write(msg.data(),msg.size());
-            });
-            endpoint->on_error([](const error_c& ec) {
-                std::cout<<"UDP svr error:"<<ec<<std::endl;
-            });
-            std::cout<<"Accept from "<<name<<std::endl;
+    std::shared_ptr<Client> endpoint;
+    svr->on_connect([&endpoint](std::shared_ptr<Client> cli, std::string name){
+        endpoint = cli;
+        endpoint->on_close([name, &endpoint](){
+            std::cout<<"Close "<<name<<std::endl;
+            //endpoint.reset();
         });
-        svr->on_error([](const error_c& ec) {
-            std::cout<<"UdpServer error:"<<ec<<std::endl;
+        endpoint->on_read([name, &endpoint](void* buf, int len){
+            std::cout<<"Server "<<name<<" read ("<<len<<"): ";
+            std::cout.write((char*)buf,len);
+            std::cout<<std::endl;
+            std::string msg = "Hello, client!";
+            int l = endpoint->write(msg.data(),msg.size());
+            std::cout<<l<<" bytes written"<<std::endl;
         });
-        svr->address(addr).init(port);//TODO: specify interface, family, ttl
+        endpoint->on_error([](const error_c& ec) {
+            std::cout<<"UDP svr error:"<<ec<<std::endl;
+        });
+        std::cout<<"Accept from "<<name<<std::endl;
+    });
+    svr->on_error([](const error_c& ec) {
+        std::cout<<"UdpServer error:"<<ec<<std::endl;
+    });
+    ec = svr->address(addr).init(port,mode);//TODO: specify interface, family, ttl
+    if (ec) {
+        std::cout<<"Error init connection: "<<ec<<std::endl;
+        return;
     }
     loop->run();
 }
 
 
 int main(int argc, char** argv) {
+    UdpServer::Mode mode = UdpServer::MULTICAST;
     Log::init();
-    Log::set_level(Log::Level::DEBUG,{"ioloop","udpclient","udpserver","svclistener"});
+    Log::set_level(Log::Level::DEBUG,{"ioloop","udpclient","udpserver","svclistener","default"});
     std::string address = "192.168.0.25";
     int port = 10000;
     bool server = true;
@@ -100,7 +104,12 @@ int main(int argc, char** argv) {
         server = std::string(argv[1])=="server";
         if (server) {
             address = "";
-            if (argc>2) port = std::stoi(argv[2]);
+            if (argc>2) {
+                port = std::stoi(argv[2]);
+                if (argc>3) {
+                    address = argv[3];
+                }
+            }
         } else {
             if (argc>2) {
                 address = argv[2];
@@ -111,9 +120,9 @@ int main(int argc, char** argv) {
         }
     }
     if (server) {
-        svr(port);
+        svr(port,address,mode);
     } else {
-        test(address,port);
+        test(address,port,mode);
     }
     return 0;
 }

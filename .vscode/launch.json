@@ -5,11 +5,15 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "test",
+            "name": "test-udp",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/build/test",
-            "args": [],
+            "program": "${workspaceFolder}/build/test-udp",
+            "args": [
+                "client",
+                "255.255.255.255",
+                "20001"
+            ],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
             "environment": [],
