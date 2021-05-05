@@ -44,10 +44,14 @@ void test(const std::string& addr, int port, UdpServer::Mode mode = UdpServer::U
         });
     loop->zeroconf_ready([&loop,&addr,port,&cli,mode](){
         std::cout<<"Client create"<<std::endl;
-        switch(mode) {
-        case UdpServer::UNICAST: cli->init(addr,port); break;
-        case UdpServer::BROADCAST: cli->init_broadcast(port); break;//TODO: specify interface
-        case UdpServer::MULTICAST: cli->init_multicast(addr, port); break;//TODO: specify interface and ttl
+        if (port==0) {
+            cli->init_service("UdpServer");
+        } else {
+            switch(mode) {
+            case UdpServer::UNICAST: cli->init(addr,port); break;
+            case UdpServer::BROADCAST: cli->init_broadcast(port); break;//TODO: specify interface
+            case UdpServer::MULTICAST: cli->init_multicast(addr, port); break;//TODO: specify interface and ttl
+            }
         }
     });
     loop->run();
@@ -101,8 +105,7 @@ int main(int argc, char** argv) {
     int port = 10000;
     bool server = true;
     if (argc>1) {
-        server = std::string(argv[1])=="server";
-        if (server) {
+        if (std::string(argv[1])=="server") {
             address = "";
             if (argc>2) {
                 port = std::stoi(argv[2]);
@@ -110,19 +113,16 @@ int main(int argc, char** argv) {
                     address = argv[3];
                 }
             }
-        } else {
+            svr(port,address,mode);
+        } else if (std::string(argv[1])=="client") {
             if (argc>2) {
                 address = argv[2];
                 if (argc>3) {
                     port = std::stoi(argv[3]);
                 }
             }
+            test(address,port,mode);
         }
-    }
-    if (server) {
-        svr(port,address,mode);
-    } else {
-        test(address,port,mode);
     }
     return 0;
 }

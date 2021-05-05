@@ -89,10 +89,9 @@ public:
 
 class StatHandler {
 public:
-    void add_stat_output(std::unique_ptr<OStat> out);
     void clear_stat_outputs();
-    auto influx_udp(const std::string& host, uint16_t port) -> std::unique_ptr<OStat>;
-    auto stat_influx_file(const std::string& filename) -> std::unique_ptr<OStat>;
+    auto add_influx_udp(const std::string& host, uint16_t port);
+    auto add_influx_file(const std::string& filename);
     virtual ~StatHandler() = default;
 };
 

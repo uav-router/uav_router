@@ -31,7 +31,7 @@ public:
     friend class UdpClientImpl;
 };
 
-class UdpClientImpl : public UdpClient, public IOPollable {
+class UdpClientImpl : public UdpClient, public IOPollable, public ServiceEvents {
 public:
     UdpClientImpl(const std::string name, IOLoopSvc* loop):IOPollable(name),_loop(loop),_resolv(loop->address()),_timer(loop->timer()) {
         //_timer->shoot([this](){ connect(); });
@@ -55,17 +55,75 @@ public:
     }
 
     auto init(const std::string& host, uint16_t port, int family=AF_UNSPEC) -> error_c override {
-        if (_addr.init(host,port)) { return create(_addr.family(),SockAddr::any(family));
+        if (_addr.init(host,port)) { return create(SockAddr::any(_addr.family()));
         }
         return _resolv->family(family).socktype(SOCK_DGRAM).protocol(IPPROTO_UDP)
             .init(host, port, [this](SockAddrList&& a) {
                 SockAddrList addresses = std::move(a);
                 if (addresses.begin()!=addresses.end()) {
-                    auto family = addresses.begin()->family();
-                    error_c ec = create(family, SockAddr::any(family));
+                    _addr = *addresses.begin();
+                    error_c ec = create(SockAddr::any(_addr.family()));
                     on_error(ec);
                 }
         });
+    }
+
+    void from_service_descr() {
+        log.debug()<<"from_service_descr "<<_service_name<<std::endl;
+        std::vector<std::pair<std::string,std::string>> txt;
+        SockAddrList addresses;
+        auto zeroconf = _loop->zeroconf();
+        if (zeroconf->service_info(_service_name, addresses, txt)) {
+            std::string broadcast_addr;
+            std::string multicast_addr;
+            int ttl = 0;
+            error_c ec;
+            for(auto& rec: txt) {
+                if (rec.first=="broadcast") {        broadcast_addr = rec.second;
+                } else if (rec.first=="multicast") { multicast_addr = rec.second;
+                } else if (rec.first=="ttl") {       ttl = std::stoi(rec.second);
+                }
+            }
+            if (!broadcast_addr.empty()) {
+                _addr.init(broadcast_addr,addresses.begin()->port());
+                ec = create(SockAddr::any(AF_INET),true);
+            } else if (!multicast_addr.empty()) {
+                _addr.init(multicast_addr,addresses.begin()->port());
+                ip_mreqn req;
+                memset(&req,0,sizeof(req));
+                ec = create(SockAddr::any(_addr.family()),false,&req,ttl);
+            } else {
+                _addr = *addresses.begin();
+                ec = create(SockAddr::any(_addr.family()));
+            }
+            on_error(ec);
+        }
+    }
+
+    void svc_resolved(std::string name, std::string endpoint, int itf, const SockAddr& addr) override {
+        log.debug()<<"svc_resolved"<<std::endl;
+        if (_fd!=-1) return;
+        if (name==_service_name || endpoint==_service_name) {
+            if (_itf.second && _itf.second!=itf) return;
+            from_service_descr();
+        }
+    }
+    void svc_removed(std::string name) override {
+    }
+
+    auto init_service(const std::string& service_name, const std::string& interface="") -> error_c override {
+        _service_name = service_name;
+        if (!interface.empty()) {
+            _itf = itf_from_str(interface);
+        }
+        auto zeroconf = _loop->zeroconf();
+        if (!zeroconf) return errno_c(EPROTONOSUPPORT, "Zeroconf not available");
+        if (!_service_pollable) {
+            _service_pollable = std::make_shared<ServicePollableProxy>(this);
+            _loop->zeroconf()->watch_services(_service_pollable, SOCK_DGRAM);
+        }
+        from_service_descr();
+        return error_c();
     }
 
     auto init_broadcast(uint16_t port, const std::string& interface="") -> error_c override {
@@ -92,7 +150,7 @@ public:
             }
             
         }
-        return create(_addr.family(),local,true);
+        return create(local,true);
     }
 
     auto init_multicast(const std::string& address, uint16_t port, const std::string& interface="", uint8_t ttl = 0) -> error_c override {
@@ -129,11 +187,12 @@ public:
                 local = SockAddr::local(itf.first, _addr.family());    
             }
         }
-        return create(_addr.family(),local,false,&req,ttl);
+        return create(local,false,&req,ttl);
     }
     
-    auto create(int family, const SockAddr& local, bool broadcast = false, ip_mreqn* itf = nullptr, uint8_t ttl = 0) -> error_c {
+    auto create(const SockAddr& local, bool broadcast = false, ip_mreqn* itf = nullptr, uint8_t ttl = 0) -> error_c {
         FD watcher(_fd);
+        int family = local.family();
         _fd = socket(family, SOCK_DGRAM | SOCK_NONBLOCK, 0);
         if (_fd == -1) { return errno_c("udp client socket");
         }
@@ -287,6 +346,9 @@ private:
     SockAddr _addr;
     int _fd = -1;
     bool _exists = true;
+    std::string _service_name;
+    std::pair<std::string,int> _itf = {"",0};
+    std::shared_ptr<ServiceEvents> _service_pollable;
     IOLoopSvc* _loop;
     std::unique_ptr<AddressResolver> _resolv;
     std::unique_ptr<Timer> _timer;

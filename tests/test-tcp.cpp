@@ -42,7 +42,9 @@ void test(const std::string& addr, int port) {
         });
     loop->zeroconf_ready([&loop,&addr,port,&cli](){
         std::cout<<"Client create"<<std::endl;
-        cli->init(addr,port);
+        if (port) { cli->init(addr,port);
+        } else {    cli->init_service("TcpServer");
+        }
     });
     loop->run();
 }

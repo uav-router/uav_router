@@ -142,6 +142,9 @@ public:
                 return errno_c(EADDRNOTAVAIL);
             }
             error_c ret = addr.bind(_fd);
+            if (!ret && addr.port()==0) {
+                addr.init(_fd);
+            }
             if (ret) return ret;
         } else if (mode == BROADCAST) {
             if (!_address.empty()) {
@@ -230,7 +233,7 @@ public:
                 {"broadcast",addr.format(SockAddr::IPADDR_ONLY)}
             });
         } else { //MULTICAST
-            register_service(g,addr.port(),AF_INET,addr.format(SockAddr::REG_SERVICE,"-claim"),{
+            register_service(g,addr.port(),addr.family(),addr.format(SockAddr::REG_SERVICE,"-claim"),{
                 {"endpoint",name},
                 {"multicast",addr.format(SockAddr::IPADDR_ONLY)},
                 {"ttl",std::to_string(_ttl)}
@@ -330,7 +333,7 @@ public:
         return HANDLED;
     }
 
-    void svc_resolved(std::string name, std::string endpoint, const SockAddr& addr) override {
+    void svc_resolved(std::string name, std::string endpoint, int itf, const SockAddr& addr) override {
     }
     void svc_removed(std::string name) override {
         // we have to close client stream when the service gone

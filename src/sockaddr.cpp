@@ -183,7 +183,7 @@ auto SockAddr::is_ip4() -> bool {
     return _impl->addr.storage.ss_family==AF_INET;
 }
 
-auto SockAddr::family() -> int {
+auto SockAddr::family() const -> int {
     if (!_impl) return AF_UNSPEC;
     return _impl->addr.storage.ss_family;
 }

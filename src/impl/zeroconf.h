@@ -36,6 +36,8 @@ public:
                 names[addr]=name;
                 aliases[name]=service.name;
             }
+            if (txt.size()) { _txt[service.name] = std::move(txt);
+            }
             log.info()<<"New service "<<service.name<<" "<<addr.format(SockAddr::REG_SERVICE)<<std::endl;
             if (_check_ports) {
                 std::regex rex("^([\\d]+)-(.*?)-claim$");
@@ -53,7 +55,7 @@ public:
                     p = _watches.erase_after(it);
                     continue;
                 }
-                p->lock()->svc_resolved(service.name,name,addr);
+                p->lock()->svc_resolved(service.name,name,service.interface,addr);
                 it = p;
             }
         });
@@ -82,6 +84,9 @@ public:
                     }
                 }
             }
+            auto txtptr = _txt.find(service.name);
+            if (txtptr!=_txt.end()) { _txt.erase(service.name);
+            }
             auto svcptr = _service.find(service.name);
             if (svcptr==_service.end()) return;
             std::string endpoint_name;
@@ -109,6 +114,22 @@ public:
         _on_complete = func;
     }
 
+    auto get_service_info(const std::string& name, SockAddrList& addresses, std::vector<std::pair<std::string,std::string>>& txt) -> bool {
+        std::string service_name = name;
+        auto alias_it = aliases.find(name);
+        if (alias_it != aliases.end()) {
+            service_name = alias_it->second;
+        }
+        auto addr_it = _service.find(service_name);
+        if (addr_it==_service.end()) return false;
+        addresses = _service[service_name];
+        auto txt_it = _txt.find(service_name);
+        if (txt_it!=_txt.end()) {
+            txt = _txt[service_name];
+        }
+        return true;
+    }
+
     std::map<SockAddr,std::string> names;
     std::map<std::string,std::string> aliases;
     std::map<std::string,std::set<uint16_t>> ports;
@@ -117,6 +138,7 @@ private:
     std::unique_ptr<AvahiQuery> _sb;
     Avahi* _avahi;
     std::map<std::string,SockAddrList> _service;
+    std::map<std::string,std::vector<std::pair<std::string,std::string>>> _txt;
     std::forward_list<std::weak_ptr<ServiceEvents>> _watches;
     AvahiQuery::OnEvent _on_complete;
     bool _check_ports = false;
@@ -179,6 +201,17 @@ public:
 
     auto port_claimed(uint16_t port, SockAddr& addr) -> bool override {
         return _udp->port_claimed(port,addr);
+    }
+
+    auto service_info(const std::string& name, SockAddrList& addresses, std::vector<std::pair<std::string,std::string>>& txt) -> int override {
+        //int ret = AF_UNSPEC;
+        if (_udp->get_service_info(name,addresses,txt)) {
+            return SOCK_DGRAM;
+        }
+        if (_tcp->get_service_info(name,addresses,txt)) {
+            return SOCK_STREAM;
+        }
+        return 0;
     }
 
     std::unique_ptr<AvahiHandler> handler;

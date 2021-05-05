@@ -67,6 +67,25 @@ public:
         });
     }
 
+    auto init_service(const std::string& service_name, const std::string& interface="") -> error_c override {
+        canon_peer_name = service_name;
+        if (!interface.empty()) {
+            _itf = itf_from_str(interface);
+        }
+        auto zeroconf = _loop->zeroconf();
+        if (!zeroconf) return errno_c(EPROTONOSUPPORT, "Zeroconf not available");
+        if (!_service_pollable) {
+            _service_pollable = std::make_shared<ServicePollableProxy>(this);
+            _loop->zeroconf()->watch_services(_service_pollable, SOCK_STREAM);
+        }
+        std::vector<std::pair<std::string,std::string>> txt;
+        if (zeroconf->service_info(service_name, _addresses, txt)) {
+            _addr = _addresses.begin();
+            connect();
+        }
+        return error_c();
+    }
+
     void connect() {
         if (_addresses.empty()) {
             _resolv->requery();
@@ -282,8 +301,9 @@ public:
         return ret;
     }
 
-    void svc_resolved(std::string name, std::string endpoint, const SockAddr& addr) override {
+    void svc_resolved(std::string name, std::string endpoint, int itf, const SockAddr& addr) override {
         if (name==canon_peer_name) {
+            if (_itf.second && _itf.second!=itf) return;
             bool noaddr = _addresses.empty();
             _addresses.add(addr);
             if (noaddr) {
@@ -311,6 +331,7 @@ public:
 private:
     SockAddrList _addresses;
     SockAddrList::iterator _addr;
+    std::pair<std::string,int> _itf = {"",0};
     int _fd = -1;
     bool _exists = true;
     IOLoopSvc* _loop;

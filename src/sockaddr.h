@@ -43,7 +43,7 @@ public:
   
   auto is_ip4() -> bool;
   auto is_any() -> bool;
-  auto family() -> int;
+  [[nodiscard]] auto family() const -> int;
   
   auto ip4_addr_t() -> in_addr_t;
   auto ip6_addr() -> uint8_t*;
