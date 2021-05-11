@@ -11,6 +11,7 @@ public:
     virtual auto clockid(int id) -> Timer& = 0;
     virtual auto shoot(OnEventFunc func) -> Timer& = 0;
     virtual void stop() = 0;
+    virtual auto armed() -> bool = 0;
 };
 
 #endif  //!__TIMER_INC_H__

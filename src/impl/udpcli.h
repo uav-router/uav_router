@@ -9,6 +9,7 @@
 using namespace std::chrono_literals;
 
 #include "fd.h"
+#include "statobj.h"
 #include "../err.h"
 #include "../loop.h"
 #include "../log.h"
@@ -38,6 +39,9 @@ public:
         auto on_err = [this,name](error_c& ec){ on_error(ec,name);};
         _resolv->on_error(on_err);
         _timer->on_error(on_err);
+        _cnt = std::make_shared<StatCounters>("udpcli");
+        _cnt->tags.push_front({"endpoint",name});
+        loop->register_report(_cnt, 1s);
     }
 
     ~UdpClientImpl() override {
@@ -315,6 +319,7 @@ public:
                         if (!_exists) return STOP;
                     }
                     dynamic_cast<UDPClientStream*>(stream.lock().get())->on_read(buffer, n);
+                    _cnt->add("read",n);
                     if (!_exists) return STOP;
                 }
             }
@@ -336,8 +341,11 @@ public:
             errno_c err;
             on_error(err, "UDP send datagram");
             _is_writeable=false;
-        } else if (ret != len) {
-            log.error()<<"Partial send "<<ret<<" from "<<len<<" bytes"<<std::endl;
+        } else {
+            _cnt->add("write",ret);
+            if (ret != len) {
+                log.error()<<"Partial send "<<ret<<" from "<<len<<" bytes"<<std::endl;
+            }
         }
         return ret;
     }
@@ -354,6 +362,7 @@ private:
     std::unique_ptr<Timer> _timer;
     std::unique_ptr<AvahiGroup> _group;
     std::map<std::string, std::weak_ptr<UDPClientStream>> _streams;
+    std::shared_ptr<StatCounters> _cnt;
     inline static Log::Log log {"udpclient"};
 };
 

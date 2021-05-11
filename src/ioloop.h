@@ -3,11 +3,11 @@
 #include <memory>
 #include <string>
 #include "err.h"
-#include "measure.h"
 
 #include "inc/endpoints.h"
 #include "inc/timer.h"
 #include "inc/signal.h"
+#include "inc/stat.h"
 
 // ---------------------------------
 class IOLoop  : public error_handler {
@@ -27,7 +27,7 @@ public:
     virtual void zeroconf_ready(OnEvent func) = 0;
     
     // stats
-    //virtual auto stats() -> StatHandler& = 0;
+    virtual auto stats() -> StatHandler* = 0;
 
     // run
     virtual void run()  = 0;

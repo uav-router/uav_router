@@ -7,9 +7,12 @@
 #include <random>
 #include <map>
 #include <cstring>
+#include <chrono>
+using namespace std::chrono_literals;
 #include <sys/socket.h>
 
 #include "fd.h"
+#include "statobj.h"
 #include "../err.h"
 #include "../loop.h"
 #include "../log.h"
@@ -18,7 +21,9 @@ std::default_random_engine reng(std::random_device{}());
 
 class UDPServerStream: public Client {
 public:
-    UDPServerStream(const std::string& name, int fd, SockAddr addr):_name(name),_fd(fd), _addr(std::move(addr)) {
+    UDPServerStream(const std::string& name, int fd, SockAddr addr, std::shared_ptr<StatCounters> cnt):
+    _name(name),_fd(fd), _addr(std::move(addr)),_cnt(std::move(cnt)) {
+        _cnt->tags.push_front({"endpoint",name});
         writeable();
     }
     
@@ -34,10 +39,18 @@ public:
             errno_c err;
             on_error(err, "UDP send datagram");
             _is_writeable=false;
-        } /*else if (ret != len) {
+        } else {
+            _cnt->add("write",ret);
+            /*if (ret != len) {
             log.error()<<"Partial send "<<ret<<" from "<<len<<" bytes"<<std::endl;
         }*/
+        }
         return ret;
+    }
+
+    void on_read(void* buf, int len) override {
+        Readable::on_read(buf,len);
+        _cnt->add("read",len);
     }
 
     auto get_peer_name() -> const std::string& override {
@@ -53,6 +66,7 @@ public:
     const std::string& _name;
     int _fd = -1;
     SockAddr _addr;
+    std::shared_ptr<StatCounters> _cnt;
 
     friend class UdpServerImpl;
 };
@@ -83,7 +97,7 @@ public:
     auto interface(const std::string& interface) -> UdpServer& override {
         _itf = itf_from_str(interface);
         if (_itf.second == 0) {
-           log.warning()<<"Can't recognize value '"<<interface<<"' as interface"<<std::endl;
+            log.warning()<<"Can't recognize value '"<<interface<<"' as interface"<<std::endl;
         }
         return *this;
     }
@@ -310,7 +324,9 @@ public:
                     }
                     auto& stream = _streams[name];
                     if (stream.expired()) {
-                        auto cli = std::make_shared<UDPServerStream>(name,_fd, std::move(addr));
+                        auto stat = std::make_shared<StatCounters>("tcpcli");
+                        _loop->register_report(stat, 1s);
+                        auto cli = std::make_shared<UDPServerStream>(name,_fd, std::move(addr),stat);
                         stream = cli;
                         on_connect(cli,name);
                         if (!_exists) return STOP;

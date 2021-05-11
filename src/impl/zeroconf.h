@@ -12,10 +12,13 @@
 #include "../loop.h"
 #include "../log.h"
 #include "avahi-poll.h"
+#include "statobj.h"
 
+enum ServiceEvent {ADD, REMOVE};
 class ServiceListener {
 public:
-    ServiceListener(Avahi* avahi, std::string type, bool check_ports=false):_avahi(avahi),_check_ports(check_ports) {
+    ServiceListener(Avahi* avahi, std::string type, std::shared_ptr<StatEvents> stat, bool check_ports=false)
+        :_avahi(avahi),_check_ports(check_ports),evt(std::move(stat)) {
         _sb = _avahi->query_service(CAvahiService("(.*)",type));
         _sb->on_resolve([this](CAvahiService service, std::string host_name,
         SockAddr addr, std::vector<std::pair<std::string,std::string>> txt,
@@ -58,6 +61,7 @@ public:
                 p->lock()->svc_resolved(service.name,name,service.interface,addr);
                 it = p;
             }
+            evt->add(ServiceEvent::ADD).add_tag("svc_name", service.name).add_tag(name, name).add_tag("type", service.type);
         });
         _sb->on_complete([this](){
             complete = true;
@@ -74,6 +78,7 @@ public:
                 p->lock()->svc_removed(service.name);
                 it = p;
             }
+            evt->add(ServiceEvent::REMOVE).add_tag("svc_name", service.name).add_tag("type", service.type);
             if (_check_ports) {
                 std::regex rex("^([\\d]+)-(.*?)-claim$");
                 std::smatch result;
@@ -144,14 +149,16 @@ private:
     bool _check_ports = false;
     
     inline static Log::Log log {"svclistener"};
+    std::shared_ptr<StatEvents> evt;
 };
 class AvahiImpl : public Avahi {
 public:
     AvahiImpl(IOLoopSvc* loop) {
         create_avahi_poll(loop, avahi_poll);
         handler = AvahiHandler::create(&avahi_poll);
-        _tcp = std::make_unique<ServiceListener>(this,"_pktstreamnames._tcp");
-        _udp = std::make_unique<ServiceListener>(this,"_pktstreamnames._udp",true);
+        evt.reset(new StatEvents("name",{{ServiceEvent::ADD,"add"},{ServiceEvent::REMOVE,"remove"}}));
+        _tcp = std::make_unique<ServiceListener>(this,"_pktstreamnames._tcp",evt);
+        _udp = std::make_unique<ServiceListener>(this,"_pktstreamnames._udp",evt,true);
         auto complete_func = [this]() {
             if (_tcp->complete && _udp->complete && _on_ready) _on_ready();
         };
@@ -219,6 +226,7 @@ public:
     std::unique_ptr<ServiceListener> _udp;
     AvahiPoll avahi_poll;
     OnEvent _on_ready;
+    std::shared_ptr<StatEvents> evt;
 };
 
 #endif  //!__ZEROCONF_IMPL_H__

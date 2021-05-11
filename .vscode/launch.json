@@ -29,10 +29,10 @@
             "miDebuggerPath": "/bin/gdb"
         },
         {
-            "name": "udptest",
+            "name": "test",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/build/udptest",
+            "program": "${workspaceFolder}/build/test",
             "args": [],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",

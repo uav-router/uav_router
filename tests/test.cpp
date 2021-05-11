@@ -11,6 +11,8 @@ void test_timer() {
         std::cout<<"Ctrl-C handler error "<<ec<<std::endl;
         return;
     }
+    auto stats = loop->stats();
+    stats->add_output(stats->influx_line("log.txt"));
     auto timer = loop->timer();
     ec = timer->shoot([&timer](){
         std::cout<<"Shoot func"<<std::endl;

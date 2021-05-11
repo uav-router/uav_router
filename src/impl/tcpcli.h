@@ -10,13 +10,15 @@ using namespace std::chrono_literals;
 #include "../err.h"
 #include "../loop.h"
 #include "../log.h"
-
+#include "statobj.h"
 
 class TcpClientImpl;
 
 class TCPClientStream: public Client {
 public:
-    TCPClientStream(const std::string& name, int fd):_name(name), _fd(fd) {}
+    TCPClientStream(const std::string& name, int fd, std::shared_ptr<StatCounters> cnt):_name(name), _fd(fd), _cnt(std::move(cnt)) {
+        _cnt->tags.push_front({"endpoint",name});
+    }
     auto write(const void* buf, int len) -> int override {
         if (!_is_writeable) return 0;
         ssize_t n = send(_fd, buf, len, MSG_NOSIGNAL);
@@ -24,10 +26,17 @@ public:
         if (n==-1) {
             errno_c ret;
             if (ret != std::error_condition(std::errc::resource_unavailable_try_again)) {
-                on_error(ret, "uart write");
+                on_error(ret, "tcp client write");
             }
+        } else {
+            _cnt->add("write",n);
         }
         return n;
+    }
+
+    void on_read(void* buf, int len) override {
+        Readable::on_read(buf,len);
+        _cnt->add("read",len);
     }
 
     auto get_peer_name() -> const std::string& override {
@@ -36,7 +45,7 @@ public:
 
     const std::string& _name;
     int _fd;
-
+    std::shared_ptr<StatCounters> _cnt;
     friend class TcpClientImpl;
 };
 
@@ -292,7 +301,9 @@ public:
             ret = _client.lock();
         }
         if (!ret) {
-            ret = std::make_shared<TCPClientStream>(peer_name,_fd);
+            auto stat = std::make_shared<StatCounters>("tcpcli");
+            _loop->register_report(stat, 1s);
+            ret = std::make_shared<TCPClientStream>(peer_name,_fd, std::move(stat));
             ret->on_error([this](error_c ec){on_error(ec);});
             _client = ret;
             if (writeable) ret->writeable();

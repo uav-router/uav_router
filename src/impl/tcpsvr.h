@@ -10,12 +10,16 @@ using namespace std::chrono_literals;
 #include "../err.h"
 #include "../loop.h"
 #include "../log.h"
+#include "statobj.h"
 
 
 class TCPServerStream : public Client, public IOPollable {
 public:
     TCPServerStream(const std::string& name, int fd, IOLoopSvc* loop):IOPollable(name), _fd(fd),_poll(loop->poll()) {
         _poll->add(_fd, EPOLLIN | EPOLLOUT | EPOLLET, this);
+        _cnt = std::make_shared<StatCounters>("tcpsvr");
+        _cnt->tags.push_front({"endpoint",name});
+        loop->register_report(_cnt, 1s);
     }
     ~TCPServerStream() override { 
         _exists = false;
@@ -61,6 +65,7 @@ public:
                 }
                 log.debug()<<"on_read"<<std::endl;
                 on_read(buffer, n);
+                _cnt->add("read",n);
                 if (!_exists) return STOP;
             }
         }
@@ -113,6 +118,8 @@ public:
                 }
                 on_error(ret, "tcp send");
             }
+        } else {
+            _cnt->add("write",n);
         }
         return n;
     }
@@ -122,6 +129,7 @@ private:
     bool _is_writeable = true;
     bool _exists = true;
     inline static Log::Log log {"tcpstream"};
+    std::shared_ptr<StatCounters> _cnt;
     friend class TcpServerImpl;
 };
 

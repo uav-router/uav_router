@@ -17,6 +17,7 @@ using namespace std::chrono_literals;
 #include "../log.h"
 
 #include "fd.h"
+#include "statobj.h"
 
 std::map<int, speed_t> bauds = {
     {0,      B0},
@@ -54,7 +55,7 @@ std::map<int, speed_t> bauds = {
 
 class UARTClient: public Client {
 public:
-    UARTClient(const std::string& name, int fd):_name(name), _fd(fd) {}
+    UARTClient(const std::string& name, int fd, std::shared_ptr<StatCounters>& cnt):_name(name), _fd(fd), _cnt(cnt) {}
     auto write(const void* buf, int len) -> int override {
         if (!_is_writeable) return 0;
         ssize_t n = ::write(_fd, buf, len);
@@ -64,6 +65,8 @@ public:
             if (ret != std::error_condition(std::errc::resource_unavailable_try_again)) {
                 on_error(ret, "uart write");
             }
+        } else {
+            _cnt->add("write",n);
         }
         return n;
     }
@@ -73,6 +76,7 @@ public:
 
     const std::string& _name;
     int _fd;
+    std::shared_ptr<StatCounters> _cnt;
 
     friend class UARTImpl;
 
@@ -95,6 +99,8 @@ public:
     UARTImpl(std::string name, IOLoopSvc* loop): IOPollable("uart"), _name(std::move(name)), _poll(loop->poll()), _udev(loop->udev()) {
         _timer = loop->timer();
         _timer->shoot([this]() { init_uart_retry(); });
+        cnt = std::make_shared<StatCounters>(name+"_uart_c");
+        loop->register_report(cnt, 1s);
     }
     ~UARTImpl() override {
         if (_fd != -1) { _poll->del(_fd, this);
@@ -226,6 +232,7 @@ public:
                 log.warning()<<"UART read returns 0 bytes"<<std::endl;
                 break;
             }
+            cnt->add("read",n);
             if (auto client = cli()) {
                 if (!_exists) return STOP;
                 client->on_read(buffer.data(), n);
@@ -273,9 +280,9 @@ public:
         }
         if (!ret) {
             if (_usb_id.empty()) {
-                ret = std::make_shared<UARTClient>(_path,_fd);
+                ret = std::make_shared<UARTClient>(_path,_fd, cnt);
             } else {
-                ret = std::make_shared<UARTClient>(_usb_id,_fd);
+                ret = std::make_shared<UARTClient>(_usb_id,_fd, cnt);
             }
             ret->on_error([this](error_c ec){on_error(ec);});
             _client = ret;
@@ -318,6 +325,7 @@ public:
     UdevLoop* _udev;
     std::unique_ptr<Timer> _timer;
     inline static Log::Log log {"uart"};
+    std::shared_ptr<StatCounters> cnt;
 };
 
 #endif  //!__UART_IMPL_H__

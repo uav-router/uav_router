@@ -22,7 +22,7 @@ public:
     void on_read(OnReadFunc func) {_on_read = func;}
     virtual auto get_peer_name() -> const std::string& = 0;
 protected:
-    void on_read(void* buf, int len) { if (_on_read) _on_read(buf, len); }
+    virtual void on_read(void* buf, int len) { if (_on_read) _on_read(buf, len); }
 private:
     OnReadFunc _on_read;
 };

@@ -27,6 +27,8 @@
 #include "impl/tcpsvr.h"
 #include "impl/udpcli.h"
 #include "impl/udpsvr.h"
+#include "impl/stat.h"
+#include "impl/statobj.h"
 
 
 //----------------------------------------
@@ -65,6 +67,8 @@ public:
     // run
     void run() override { 
         log.debug()<<"run start"<<std::endl;
+        _stat = std::make_shared<StatDurations>("loop");
+        register_report(_stat, 100ms);
         //register_report(&_impl->stat,100ms);
         std::vector<epoll_event> events(_epoll_events_number);
         _loop_stop = false;
@@ -84,41 +88,41 @@ public:
                 if (evs & EPOLLIN) {
                     //log.debug()<<"EPOLLIN"<<std::endl;
                     int ret = obj->epollIN();
-                    //auto s = stat.time_measure["in"].measure();
+                    auto s = _stat->time["in"].measure();
                     if (ret==IOPollable::NOT_HANDLED) log.warning()<<obj->name<<" EPOLLIN not handled"<<std::endl;
                     if (ret==IOPollable::STOP) continue;
                 }
                 if (evs & EPOLLOUT) {
                     //log.debug()<<"EPOLLOUT"<<std::endl;
-                    //auto s = _impl->stat.time_measure["out"].measure();
+                    auto s = _stat->time["out"].measure();
                     int ret = obj->epollOUT();
                     if (ret==IOPollable::NOT_HANDLED) log.warning()<<obj->name<<" EPOLLOUT not handled"<<std::endl;
                     if (ret==IOPollable::STOP) continue;
                 }
                 if (evs & EPOLLPRI) {
                     //log.debug()<<"EPOLLPRI"<<std::endl;
-                    //auto s = _impl->stat.time_measure["pri"].measure();
+                    auto s = _stat->time["pri"].measure();
                     int ret = obj->epollPRI();
                     if (ret==IOPollable::NOT_HANDLED) log.warning()<<obj->name<<" EPOLLPRI not handled"<<std::endl;
                     if (ret==IOPollable::STOP) continue;
                 }
                 if (evs & EPOLLERR) {
                     //log.debug()<<"EPOLLERR"<<std::endl;
-                    //auto s = _impl->stat.time_measure["err"].measure();
+                    auto s = _stat->time["err"].measure();
                     int ret = obj->epollERR();
                     if (ret==IOPollable::NOT_HANDLED) log.warning()<<obj->name<<" EPOLLERR not handled"<<std::endl;
                     if (ret==IOPollable::STOP) continue;
                 }
                 if (evs & EPOLLHUP) {
                     //log.debug()<<"EPOLLHUP"<<std::endl;
-                    //auto s = _impl->stat.time_measure["hup"].measure();
+                    auto s = _stat->time["hup"].measure();
                     int ret = obj->epollHUP();
                     if (ret==IOPollable::NOT_HANDLED) log.warning()<<obj->name<<" EPOLLHUP not handled"<<std::endl;
                     if (ret==IOPollable::STOP) continue;
                 }
                 if (evs & EPOLLRDHUP) {
                     //log.debug()<<"EPOLLRDHUP"<<std::endl;
-                    //auto s = _impl->stat.time_measure["rdhup"].measure();
+                    auto s = _stat->time["rdhup"].measure();
                     int ret = obj->epollRDHUP();
                     if (ret==IOPollable::NOT_HANDLED) log.warning()<<obj->name<<" EPOLLRDHUP not handled"<<std::endl;
                     if (ret==IOPollable::STOP) continue;
@@ -152,10 +156,10 @@ public:
     }
 
     auto signal_handler() -> std::unique_ptr<Signal> override {
-      return std::unique_ptr<Signal>(new SignalImpl{this});
+        return std::unique_ptr<Signal>(new SignalImpl{this});
     }
     auto timer() -> std::unique_ptr<Timer> override {
-      return std::unique_ptr<Timer>(new TimerImpl{this});
+        return std::unique_ptr<Timer>(new TimerImpl{this});
     }
 
     auto address() -> std::unique_ptr<AddressResolver> override {
@@ -207,6 +211,21 @@ public:
         return _zeroconf.get();
     }
 
+    auto stats() -> StatHandler* override {
+        if (_stats) return _stats.get();
+        _stats = std::make_unique<StatHandlerImpl>(this);
+        _stats->on_error([this](const error_c& ec) {on_error(ec);});
+        return _stats.get();
+    }
+
+    void register_report(std::shared_ptr<Stat> source, std::chrono::nanoseconds period) override {
+        if (!_stats) {
+            _stats = std::make_unique<StatHandlerImpl>(this);
+            _stats->on_error([this](const error_c& ec) {on_error(ec);});
+        }
+        _stats->register_report(source, period);
+    }
+
     Epoll _epoll;
     int _epoll_events_number;
     bool _loop_stop = false;
@@ -216,6 +235,8 @@ public:
     std::unique_ptr<Signal> ctrlC_handler;
     std::unique_ptr<UDevIO> _udev;
     std::unique_ptr<AvahiImpl> _zeroconf;
+    std::unique_ptr<StatHandlerImpl> _stats;
+    std::shared_ptr<StatDurations> _stat;
     inline static Log::Log log {"ioloop"};
 };
 

@@ -4,10 +4,13 @@
 #include <memory>
 #include <unistd.h>
 #include <forward_list>
+#include <chrono>
+using namespace std::chrono_literals;
 
 #include <sys/epoll.h>
 #include <libudev.h> //dnf install systemd-devel; apt-get install libudev-dev
 #include "../loop.h"
+#include "statobj.h"
 
 class UDevIO : public UdevLoop, public IOPollable, public error_handler {
 public:
@@ -39,6 +42,8 @@ public:
             return;
         }
         _ec = _poll->add(_fd, EPOLLIN, this);
+        evt.reset(new StatEvents("udev",{{0,"usb_evt"}}));
+        loop->register_report(evt, 1s);
     }
     auto get_ec() -> error_c& { return _ec; }
 
@@ -56,6 +61,7 @@ public:
             }
         }
         if (link.empty()) return;
+        evt->add(0).add_tag("action", action).add_tag("node", node).add_tag("link", link);
         auto it = udev_watches.before_begin();
         for(auto p = udev_watches.begin();p!=udev_watches.end();p=std::next(it)) {
             if (p->expired()) {
@@ -178,6 +184,7 @@ private:
     std::forward_list<std::weak_ptr<UdevEvents>> udev_watches;
     Poll* _poll;
     error_c _ec;
+    std::shared_ptr<StatEvents> evt;
 };
 
 #endif  //!__UDEV_IMPL__H__
