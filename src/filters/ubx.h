@@ -5,10 +5,12 @@
 #include <cstring>
 #include <limits>
 #include <array>
+#include "filterbase.h"
 
-class UBX : public Filter {
+class UBX : public FilterBase {
 public:
     enum {PREAMBLE0=0xb5, PREAMBLE1=0x62};
+    UBX():FilterBase("UBX") {}
     auto write(const void* buf, int len) -> int override {
         auto* ptr = (uint8_t*)buf;
         auto ret = len;
@@ -67,6 +69,7 @@ public:
                         if (valid_checksum()) { 
                             write_next(packet.data(),packet_len);
                         } else {
+                            cnt->add("badcrc",1);
                             write_rest(packet.data(),2);
                             write(packet.data()+2,packet_len-2);
                         }

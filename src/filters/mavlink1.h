@@ -3,6 +3,9 @@
 #include "../inc/endpoints.h"
 #include <cstdint>
 #include <cstring>
+#include <memory>
+
+#include "filterbase.h"
 
 enum {X25_INIT_CRC=0xffff};
 
@@ -50,10 +53,10 @@ std::array<uint8_t,256> crc_extra =
                          49,  170, 44,  83,  46,   0};
 
 
-class Mavlink_v1 : public Filter {
+class Mavlink_v1 : public FilterBase {
 public:
     enum {STX=0xFE};
-    Mavlink_v1(uint8_t* crc_array=crc_extra.data()):_crc_extra(crc_array) {}
+    Mavlink_v1(uint8_t* crc_array=crc_extra.data()):FilterBase("mavlink_v1"),_crc_extra(crc_array) {}
     auto write(const void* buf, int len) -> int override {
         auto* ptr = (uint8_t*)buf;
         auto ret = len;
@@ -96,6 +99,7 @@ public:
                         if (valid_checksum()) {
                             write_next(packet.data(),packet_len);
                             break;
+                        } else { cnt->add("badcrc",1);
                         }
                         write_rest(packet.data(),1);
                     }
@@ -109,9 +113,6 @@ public:
         if (_crc_extra) { crc_accumulate(_crc_extra[packet[5]], &crc);
         }
         return (packet[packet_len-2]+(packet[packet_len-1]>>8))==crc;
-    }
-    auto stat() -> std::shared_ptr<Stat> override {
-        return std::shared_ptr<Stat>();
     }
 private:
     std::array<uint8_t,263> packet;

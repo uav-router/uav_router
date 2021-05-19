@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <cstring>
 #include <limits>
+#include "filterbase.h"
 
 auto crc24(const uint8_t *bytes, uint16_t len) -> uint32_t {
     uint32_t crc = 0;
@@ -22,10 +23,10 @@ auto crc24(const uint8_t *bytes, uint16_t len) -> uint32_t {
 }
 
 
-class RTCM_v3 : public Filter {
+class RTCM_v3 : public FilterBase {
 public:
     enum {PREAMBLE=0xD3};
-
+    RTCM_v3():FilterBase("RTCM_v3") {}
     auto write(const void* buf, int len) -> int override {
         auto* ptr = (uint8_t*)buf;
         auto ret = len;
@@ -73,6 +74,7 @@ public:
                         if (valid_checksum()) { 
                             write_next(packet.data(),packet_len);
                         } else {
+                            cnt->add("badcrc",1);
                             write_rest(packet.data(),2);
                             write(packet.data()+2,packet_len-2);
                         }

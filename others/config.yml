@@ -97,9 +97,10 @@ endpoints:
           max: 50000
         ttl: 0
   file:
-    name: 'filename'
-    timestamp: false
-    length: false
+    endpoint_name:
+      name: 'filename'
+      timestamp: false
+      length: false
 routes:
   route_direct:
     src:
@@ -114,6 +115,7 @@ routes:
       local: name
       remote: name
     dst:
+      name: "filter1"
       type: mavlink
       dst: name3
   route_rest:
@@ -122,17 +124,20 @@ routes:
       remote: name
     dst:
       type: ubx
+      name: fubx
       dst: 
         - name2
         - name3
       rest:
         type: rtcm3
+        name: frtcm
         dst: name4
         rest:
           type: nmea
+          name: fnmea
           dst: name5
 stats:
-  endpoint: endpointname
+  endpoint: endpoint_name
   tags:
     - tag5
     - tag6

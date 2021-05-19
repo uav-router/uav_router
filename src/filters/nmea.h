@@ -4,10 +4,12 @@
 #include <cstdint>
 #include <cstring>
 #include <limits>
+#include "filterbase.h"
 
-class NMEA : public Filter {
+class NMEA : public FilterBase {
 public:
     enum {PREAMBLE='$'};
+    NMEA():FilterBase("NMEA") {}
 
     auto write(const void* buf, int len) -> int override {
         auto* ptr = (uint8_t*)buf;
@@ -75,6 +77,7 @@ public:
                         } else {
                             write_rest(packet.data(),1);
                             write(packet.data()+1,packet_len-1);
+                            cnt->add("badcrc",1);
                         }
                     } else {
                         write_rest(packet.data(),packet_len);
@@ -92,9 +95,6 @@ public:
         }
         std::string crc_str{ char(packet[packet_len-4]), char(packet[packet_len-3])};
         return crc == strtol(crc_str.c_str(),nullptr,16);
-    }
-    auto stat() -> std::shared_ptr<Stat> override {
-        return std::shared_ptr<Stat>();
     }
 private:
     std::array<uint8_t,1024> packet;

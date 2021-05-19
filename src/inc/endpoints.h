@@ -119,7 +119,7 @@ public:
     void chain(std::shared_ptr<Writeable> next) { _next = next;
     }
 protected:
-    auto write_next(const void* buf, int len) -> int {
+    virtual auto write_next(const void* buf, int len) -> int {
         if (!_next.expired())  return _next.lock()->write(buf,len);
         return 0;
     }
@@ -131,7 +131,7 @@ public:
     void rest(std::shared_ptr<Writeable> r) { _rest = r;
     }
 protected:
-    auto write_rest(const void* buf, int len) -> int {
+    virtual auto write_rest(const void* buf, int len) -> int {
         if (!_rest.expired())  return _rest.lock()->write(buf,len);
         return 0;
     }
