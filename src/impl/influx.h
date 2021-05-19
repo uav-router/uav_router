@@ -1,10 +1,8 @@
 #ifndef __INFLUX__H__
 #define __INFLUX__H__
-#include "../inc/stat.h"
 #include "../inc/endpoints.h"
 #include "../ioloop.h"
 #include <deque>
-#include <cstdio>
 
 
 class InfluxStream : public OStatEndpoint {
@@ -22,7 +20,7 @@ public:
             }
         }
     }
-    void init( std::unique_ptr<Writeable> out ) {
+    void init( std::shared_ptr<Writeable> out ) {
         _out = std::move(out);
         _out->writeable([this](){ flush(); });
     }
@@ -67,30 +65,9 @@ public:
     int _queue_max_size = 10000;
     int _queue_shrink_size = 9900;
     std::string _global_tags;
-    std::unique_ptr<Writeable> _out;
+    std::shared_ptr<Writeable> _out;
     std::stringstream _pack;
     std::deque<std::string> _queue;
-};
-
-class OFileStream : public Writeable, public error_handler {
-public:
-    ~OFileStream() override {
-        fclose(f);
-    }
-    auto open(const std::string& filename) -> error_c{
-        f = fopen(filename.c_str(),"a");
-        if (!f) return errno_c("fopen stream");
-        return error_c();
-    }
-    auto write(const void* buf, int len) -> int override {
-        size_t ret =  fwrite(buf,1,len,f);
-        if (ferror(f)) {
-            on_error(errno_c("write file"));
-        }
-        return ret;
-    }
-private:
-    FILE *f;
 };
 
 #endif  //!__INFLUX__H__

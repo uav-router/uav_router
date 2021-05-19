@@ -5,7 +5,6 @@
 #include <sys/socket.h>
 
 #include "../err.h"
-#include "stat.h"
 /*
                UART  TCP_SRV TCPSRV_STREAM TCP_CLI UDP_SRV UDP_SRV_STREAM UDP_CLI
 on_read          X      0          X          X       0          X           X
@@ -109,6 +108,7 @@ public:
     virtual auto init(uint16_t port=0, Mode mode = UNICAST) -> error_c = 0;
 };
 
+#include "stat.h"
 class Endpoint : public error_handler, public Writeable {
 public:
     virtual auto stat() -> std::shared_ptr<Stat> = 0;

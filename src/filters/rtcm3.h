@@ -23,6 +23,7 @@ auto crc24(const uint8_t *bytes, uint16_t len) -> uint32_t {
 
 
 class RTCM_v3 : public Filter {
+public:
     enum {PREAMBLE=0xD3};
 
     auto write(const void* buf, int len) -> int override {

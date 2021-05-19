@@ -8,6 +8,7 @@
 #include "inc/timer.h"
 #include "inc/signal.h"
 #include "inc/stat.h"
+#include "inc/ofile.h"
 
 // ---------------------------------
 class IOLoop  : public error_handler {
@@ -21,6 +22,7 @@ public:
     virtual auto udp_server(const std::string& name) -> std::unique_ptr<UdpServer> = 0;
     virtual auto signal_handler() -> std::unique_ptr<Signal> = 0;
     virtual auto timer() -> std::unique_ptr<Timer> = 0;
+    virtual auto outfile() -> std::unique_ptr<OFileStream> = 0;
     
     virtual void block_udev() = 0;
     virtual void block_zeroconf() = 0;

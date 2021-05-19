@@ -6,6 +6,7 @@
 #include <limits>
 
 class NMEA : public Filter {
+public:
     enum {PREAMBLE='$'};
 
     auto write(const void* buf, int len) -> int override {

@@ -17,7 +17,7 @@ public:
     virtual auto udev() -> UdevLoop* = 0;
     virtual auto zeroconf() -> Avahi* = 0;
     virtual auto address() -> std::unique_ptr<AddressResolver> = 0;
-    virtual void register_report(std::shared_ptr<Stat> source, std::chrono::nanoseconds period) = 0;
+    //virtual void register_report(std::shared_ptr<Stat> source, std::chrono::nanoseconds period) = 0;
     static auto loop(int pool_events=5) -> std::unique_ptr<IOLoopSvc>;
 };
 

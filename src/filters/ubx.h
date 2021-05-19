@@ -7,6 +7,7 @@
 #include <array>
 
 class UBX : public Filter {
+public:
     enum {PREAMBLE0=0xb5, PREAMBLE1=0x62};
     auto write(const void* buf, int len) -> int override {
         auto* ptr = (uint8_t*)buf;

@@ -29,6 +29,7 @@
 #include "impl/udpsvr.h"
 #include "impl/stat.h"
 #include "impl/statobj.h"
+#include "impl/ofile.h"
 
 
 //----------------------------------------
@@ -68,8 +69,11 @@ public:
     void run() override { 
         log.debug()<<"run start"<<std::endl;
         _stat = std::make_shared<StatDurations>("loop");
-        register_report(_stat, 100ms);
-        //register_report(&_impl->stat,100ms);
+        if (!_stats) {
+            _stats = std::make_unique<StatHandlerImpl>(this);
+            _stats->on_error([this](const error_c& ec) {on_error(ec);});
+        }
+        _stats->register_report(_stat, 100ms);
         std::vector<epoll_event> events(_epoll_events_number);
         _loop_stop = false;
         while(!_loop_stop) {
@@ -218,12 +222,8 @@ public:
         return _stats.get();
     }
 
-    void register_report(std::shared_ptr<Stat> source, std::chrono::nanoseconds period) override {
-        if (!_stats) {
-            _stats = std::make_unique<StatHandlerImpl>(this);
-            _stats->on_error([this](const error_c& ec) {on_error(ec);});
-        }
-        _stats->register_report(source, period);
+    auto outfile() -> std::unique_ptr<OFileStream> override {
+        return std::make_unique<OFileStreamImpl>();
     }
 
     Epoll _epoll;

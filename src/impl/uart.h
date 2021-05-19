@@ -100,7 +100,7 @@ public:
         _timer = loop->timer();
         _timer->shoot([this]() { init_uart_retry(); });
         cnt = std::make_shared<StatCounters>(name+"_uart_c");
-        loop->register_report(cnt, 1s);
+        loop->stats()->register_report(cnt, 1s);
     }
     ~UARTImpl() override {
         if (_fd != -1) { _poll->del(_fd, this);

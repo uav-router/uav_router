@@ -9,10 +9,10 @@
 using namespace std::chrono_literals;
 
 #include "fd.h"
-#include "statobj.h"
 #include "../err.h"
 #include "../loop.h"
 #include "../log.h"
+#include "statobj.h"
 
 
 
@@ -41,7 +41,7 @@ public:
         _timer->on_error(on_err);
         _cnt = std::make_shared<StatCounters>("udpcli");
         _cnt->tags.push_front({"endpoint",name});
-        loop->register_report(_cnt, 1s);
+        loop->stats()->register_report(_cnt, 1s);
     }
 
     ~UdpClientImpl() override {
@@ -134,7 +134,7 @@ public:
         SockAddr local = SockAddr::any(AF_INET);
         if (interface.empty()) { 
             _addr.init("<broadcast>",port);
-        } else {
+        } else { //TODO: accept broadcast address in interface parameter
             if (_addr.init(interface,port)) {
                 local = SockAddr::local(_addr.itf(true),AF_INET);
             } else {
@@ -151,8 +151,7 @@ public:
                     _addr = *list.begin();
                     local = SockAddr::local(_addr.itf(true),AF_INET);
                 }
-            }
-            
+            } 
         }
         return create(local,true);
     }

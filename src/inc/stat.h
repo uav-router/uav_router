@@ -28,10 +28,10 @@ public:
 
 class StatHandler {
 public:
-    virtual auto influx_udp(const std::string& host, uint16_t port) -> std::unique_ptr<OStatEndpoint> = 0;
-    virtual auto influx_line(const std::string& filename) -> std::unique_ptr<OStatEndpoint> = 0;
-    virtual void add_output(std::unique_ptr<OStat> out) = 0;
+    virtual auto stat() -> std::shared_ptr<OStatEndpoint> = 0;
+    virtual void set_output(std::shared_ptr<Writeable> out) = 0;
     virtual void clear_outputs() = 0;
+    virtual void register_report(std::shared_ptr<Stat> source, std::chrono::nanoseconds period) = 0;
 };
 
 #endif  //!__STAT_INC_H__

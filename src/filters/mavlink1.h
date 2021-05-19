@@ -51,6 +51,7 @@ std::array<uint8_t,256> crc_extra =
 
 
 class Mavlink_v1 : public Filter {
+public:
     enum {STX=0xFE};
     Mavlink_v1(uint8_t* crc_array=crc_extra.data()):_crc_extra(crc_array) {}
     auto write(const void* buf, int len) -> int override {

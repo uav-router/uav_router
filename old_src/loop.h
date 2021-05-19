@@ -68,7 +68,6 @@ public:
     // stats
     void add_stat_output(std::unique_ptr<OStat> out);
     void clear_stat_outputs();
-    void register_report(Stat* source, std::chrono::nanoseconds period);
     void unregister_report(Stat* source);
     // zeroconf
     auto query_service(CAvahiService pattern, AvahiLookupFlags flags=(AvahiLookupFlags)0) -> std::unique_ptr<AvahiQuery> override;

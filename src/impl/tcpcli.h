@@ -302,7 +302,7 @@ public:
         }
         if (!ret) {
             auto stat = std::make_shared<StatCounters>("tcpcli");
-            _loop->register_report(stat, 1s);
+            _loop->stats()->register_report(stat, 1s);
             ret = std::make_shared<TCPClientStream>(peer_name,_fd, std::move(stat));
             ret->on_error([this](error_c ec){on_error(ec);});
             _client = ret;

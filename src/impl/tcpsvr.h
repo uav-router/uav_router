@@ -19,7 +19,7 @@ public:
         _poll->add(_fd, EPOLLIN | EPOLLOUT | EPOLLET, this);
         _cnt = std::make_shared<StatCounters>("tcpsvr");
         _cnt->tags.push_front({"endpoint",name});
-        loop->register_report(_cnt, 1s);
+        loop->stats()->register_report(_cnt, 1s);
     }
     ~TCPServerStream() override { 
         _exists = false;

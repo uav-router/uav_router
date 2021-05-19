@@ -1,0 +1,139 @@
+endpoints:
+  uart:
+    uart1:
+      path: '/dev/ttyS1'
+      baudrate: 115200
+      flow_control: false
+    stat: false
+  tcp:
+    clients:
+      tcp_to_address:
+        address: 'hostname' # or address
+        port: 12345
+        family: v4 # v4,v6,unspec
+        stat:
+          period: 100ms
+          packsize: 400
+          queue:
+            max: 10000
+            shrink: 9900
+          tags:
+            - tag1
+            - tag2
+            - tag3
+      tcp_to_service:
+        service: 'servicename'
+        interface: 'eth0' # '192.168.0.10', '1'
+    servers:
+      bind_to_port:
+        port: 5000
+        family: v4 # v4,v6
+      bind_to_interface:
+        port: 5000
+        family: v4 # v4,v6
+        interface: 'eth0' # '192.168.0.10', '1'
+      bind_to_hostname:
+        port: 5000
+        family: v4 # v4,v6
+        address: 'hostname' # or address
+      tcp_service:
+        family: v4 # v4,v6
+  udp:
+    clients: # send data to remote addresses
+      unicast_client:
+        mode: 'unicast'
+        address: 'hostname' # or address
+        port: 5000
+        family: v4 # v4,v6
+      broadcast_client:
+        mode: 'broadcast'
+        port: 5000
+        interface: 'eth0' # '192.168.0.10', '1'
+      multicast_client:
+        mode: 'multicast'
+        port: 5000
+        address: 'multicast address'
+        interface: 'eth0' # '192.168.0.10', '1'
+        ttl: 0
+      service_client:
+        service: 'servicename'
+        interface: 'eth0' # '192.168.0.10', '1'
+    servers: #listen specific address and answer each client
+      unicast_listen_to_port:
+        mode: 'unicast'
+        port: 5000
+        interface: 'eth0' # '192.168.0.10', '1'
+        family: v4 # v4,v6
+      unicast_service:
+        mode: 'unicast'
+        interface: 'eth0' # '192.168.0.10', '1'
+        family: v4 # v4,v6
+      broadcast_listen_to_port:
+        mode: 'broadcast'
+        port: 5000
+        interface: 'eth0' # '192.168.0.10', '1'
+        family: v4 # v4,v6
+      broadcast_service:
+        mode: 'broadcast'
+        interface: 'eth0' # '192.168.0.10', '1'
+        family: v4 # v4,v6
+        ports:
+          min: 20000
+          max: 50000
+      multicast_listen_to_address:
+        mode: 'multicast'
+        address: 'multicast address'
+        port: 5000
+        interface: 'eth0' # '192.168.0.10', '1'
+        family: v4 # v4,v6
+        ttl: 0
+      multicast_service:
+        mode: 'multicast'
+        address: 'multicast address'
+        interface: 'eth0' # '192.168.0.10', '1'
+        family: v4 # v4,v6
+        ports:
+          min: 20000
+          max: 50000
+        ttl: 0
+  file:
+    name: 'filename'
+    timestamp: false
+    length: false
+routes:
+  route_direct:
+    src:
+      local: name
+      remote: name
+    dst:
+      - name1
+      - name2
+      - regexp
+  route_filter:
+    src:
+      local: name
+      remote: name
+    dst:
+      type: mavlink
+      dst: name3
+  route_rest:
+    src:
+      local: name
+      remote: name
+    dst:
+      type: ubx
+      dst: 
+        - name2
+        - name3
+      rest:
+        type: rtcm3
+        dst: name4
+        rest:
+          type: nmea
+          dst: name5
+stats:
+  endpoint: endpointname
+  tags:
+    - tag5
+    - tag6
+    - tag7

@@ -12,10 +12,10 @@ using namespace std::chrono_literals;
 #include <sys/socket.h>
 
 #include "fd.h"
-#include "statobj.h"
 #include "../err.h"
 #include "../loop.h"
 #include "../log.h"
+#include "statobj.h"
 
 std::default_random_engine reng(std::random_device{}());
 
@@ -73,7 +73,7 @@ public:
 
 class UdpServerImpl : public UdpServer, public IOPollable, public ServiceEvents {
 public:
-    UdpServerImpl(const std::string name, IOLoopSvc* loop):IOPollable(name),_loop(loop) {
+    UdpServerImpl(const std::string name, IOLoopSvc* loop):IOPollable(name),_loop(loop),_ports(20000,50000) {
     }
     ~UdpServerImpl() override {
         _exists = false;
@@ -325,7 +325,7 @@ public:
                     auto& stream = _streams[name];
                     if (stream.expired()) {
                         auto stat = std::make_shared<StatCounters>("tcpcli");
-                        _loop->register_report(stat, 1s);
+                        _loop->stats()->register_report(stat, 1s);
                         auto cli = std::make_shared<UDPServerStream>(name,_fd, std::move(addr),stat);
                         stream = cli;
                         on_connect(cli,name);
@@ -367,7 +367,7 @@ private:
     std::string _address;
     std::pair<std::string,int> _itf = {"",0};
     uint8_t _ttl = 0;
-    int _family = AF_INET;
+    int _family = AF_INET; //TODO: add family setup function
     std::uniform_int_distribution<uint16_t> _ports;
     int _fd = -1;
     bool _exists = true;

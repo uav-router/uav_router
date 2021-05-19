@@ -43,7 +43,7 @@ public:
         }
         _ec = _poll->add(_fd, EPOLLIN, this);
         evt.reset(new StatEvents("udev",{{0,"usb_evt"}}));
-        loop->register_report(evt, 1s);
+        loop->stats()->register_report(evt, 1s);
     }
     auto get_ec() -> error_c& { return _ec; }
 
