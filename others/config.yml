@@ -4,7 +4,7 @@ endpoints:
       path: '/dev/ttyS1'
       baudrate: 115200
       flow_control: false
-    stat: false
+      stat: false
   tcp:
     clients:
       tcp_to_address:
@@ -13,14 +13,10 @@ endpoints:
         family: v4 # v4,v6,unspec
         stat:
           period: 100ms
-          packsize: 400
-          queue:
-            max: 10000
-            shrink: 9900
           tags:
-            - tag1
-            - tag2
-            - tag3
+            tag1_name: tag5
+            tag2_name: tag6
+            tag3_name: tag7
       tcp_to_service:
         service: 'servicename'
         interface: 'eth0' # '192.168.0.10', '1'
@@ -139,6 +135,12 @@ routes:
 stats:
   endpoint: endpoint_name
   tags:
-    - tag5
-    - tag6
-    - tag7
+    tagname1: tag5
+    tagname2: tag6
+    tagname3: tag7
+
+  packsize: 400
+  queue:
+    max: 10000
+    shrink: 9900
+          

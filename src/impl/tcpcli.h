@@ -5,12 +5,14 @@
 #include <sys/ioctl.h>
 
 #include <chrono>
+#include <sys/socket.h>
 using namespace std::chrono_literals;
 
 #include "../err.h"
 #include "../loop.h"
 #include "../log.h"
 #include "statobj.h"
+#include "yaml.h"
 
 class TcpClientImpl;
 
@@ -66,6 +68,42 @@ public:
         }
         cleanup();
     }
+
+#ifdef YAML_CONFIG
+    auto init(YAML::Node cfg) -> error_c override {
+        auto statcfg = cfg["stat"];
+        if (statcfg && statcfg.IsMap()) {
+            auto period = duration(statcfg["period"]);
+            if (period.count()) {
+                stat_period = period;
+            }
+            auto tags = statcfg["tags"];
+            if (tags && tags.IsMap()) {
+                for(auto tag : tags) {
+                    std::string key = tag.first.as<std::string>();
+                    std::string val = tag.second.as<std::string>();
+                    stat_tags.push_front(std::make_pair(key,val));
+                }
+            }
+        }
+        if (cfg["service"]) {
+            std::string itf;
+            if (cfg["interface"]) itf = cfg["interface"].as<std::string>();
+            return init_service(cfg["service"].as<std::string>(), itf);
+        }
+        std::string address;
+        uint16_t port;
+        if (!cfg["address"]) {
+            return errno_c(ENOTSUP,"tcp client address");
+        }
+        address = cfg["address"].as<std::string>();
+        if (!cfg["port"]) {
+            return errno_c(ENOTSUP,"tcp client address");
+        }
+        port = cfg["port"].as<int>();
+        return init(address, port, address_family(cfg["family"]));
+    }
+#endif
 
     auto init(const std::string& host, uint16_t port, int family) -> error_c override {
         return _resolv->family(family).socktype(SOCK_STREAM).protocol(IPPROTO_TCP)
@@ -302,7 +340,10 @@ public:
         }
         if (!ret) {
             auto stat = std::make_shared<StatCounters>("tcpcli");
-            _loop->stats()->register_report(stat, 1s);
+            if (stat_period.count()) {
+                stat->tags = stat_tags;
+                _loop->stats()->register_report(stat, stat_period);
+            }
             ret = std::make_shared<TCPClientStream>(peer_name,_fd, std::move(stat));
             ret->on_error([this](error_c ec){on_error(ec);});
             _client = ret;
@@ -353,6 +394,8 @@ private:
     std::unique_ptr<Timer> _timer;
     std::weak_ptr<TCPClientStream> _client;
     std::shared_ptr<ServiceEvents> _service_pollable;
+    std::chrono::nanoseconds stat_period = 1s;
+    std::forward_list<std::pair<std::string,std::string>> stat_tags;
     inline static Log::Log log {"tcpclient"};
 };
 

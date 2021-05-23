@@ -16,6 +16,7 @@ using namespace std::chrono_literals;
 #include "../loop.h"
 #include "../log.h"
 #include "statobj.h"
+#include "yaml.h"
 
 std::default_random_engine reng(std::random_device{}());
 
@@ -94,8 +95,9 @@ public:
         return *this;
     }
 
-    auto interface(const std::string& interface) -> UdpServer& override {
+    auto interface(const std::string& interface, int family) -> UdpServer& override {
         _itf = itf_from_str(interface);
+        _family = family;
         if (_itf.second == 0) {
             log.warning()<<"Can't recognize value '"<<interface<<"' as interface"<<std::endl;
         }
@@ -255,6 +257,42 @@ public:
         }
     }
 
+#ifdef YAML_CONFIG
+    auto init(YAML::Node cfg) -> error_c override {
+        auto statcfg = cfg["stat"];
+        if (statcfg && statcfg.IsMap()) {
+            auto period = duration(statcfg["period"]);
+            if (period.count()) {
+                stat_period = period;
+            }
+            auto tags = statcfg["tags"];
+            if (tags && tags.IsMap()) {
+                for(auto tag : tags) {
+                    stat_tags.push_front(std::make_pair(tag.first.as<std::string>(),tag.second.as<std::string>()));
+                }
+            }
+        }
+        int family = address_family(cfg["family"]);
+        if (family==AF_UNSPEC) family = AF_INET;
+        std::string data;
+        if (cfg["interface"]) data = cfg["interface"].as<std::string>();
+        if (!data.empty()) interface(data,family);
+        data.clear();
+        if (cfg["address"]) data = cfg["address"].as<std::string>();
+        if (!data.empty()) address(data);
+        if (cfg["ttl"]) _ttl = cfg["ttl"].as<int>();
+        auto cfgports = cfg["ports"];
+        if (cfgports) {
+            if (cfgports["min"] && cfgports["max"]) {
+                service_port_range(cfgports["min"].as<int>(), cfgports["max"].as<int>());
+            }
+        }
+        uint16_t port = 0;
+        if (cfg["port"]) port = cfg["port"].as<int>();
+        return init(port,udp_type(cfg["mode"]));
+    }
+#endif
+
     auto init(uint16_t port=0, Mode mode = UNICAST) -> error_c override {
         if (!_loop->zeroconf() && port==0) return errno_c(EINVAL,"Zero port");
         SockAddr addr;
@@ -372,6 +410,8 @@ private:
     int _fd = -1;
     bool _exists = true;
     IOLoopSvc* _loop;
+    std::chrono::nanoseconds stat_period = 1s;
+    std::forward_list<std::pair<std::string,std::string>> stat_tags;
     std::map<std::string, std::weak_ptr<UDPServerStream>> _streams;
     std::unique_ptr<AvahiGroup> _group;
     std::shared_ptr<ServiceEvents> _service_pollable;

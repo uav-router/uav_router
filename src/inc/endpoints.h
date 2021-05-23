@@ -5,6 +5,9 @@
 #include <sys/socket.h>
 
 #include "../err.h"
+#ifdef YAML_CONFIG
+#include <yaml-cpp/yaml.h>
+#endif //YAML_CONFIG
 /*
                UART  TCP_SRV TCPSRV_STREAM TCP_CLI UDP_SRV UDP_SRV_STREAM UDP_CLI
 on_read          X      0          X          X       0          X           X
@@ -54,10 +57,17 @@ private:
     OnEventFunc _on_close;
 };
 
+class Configurable {
+public:
+#ifdef YAML_CONFIG
+    virtual auto init(YAML::Node cfg) -> error_c = 0;
+#endif //YAML_CONFIG
+};
+
 class Client : public Readable, public Writeable, public Closeable {
 };
 
-class StreamSource: public error_handler {
+class StreamSource: public error_handler, public Configurable {
 public:
     using OnConnectFunc  = std::function<void(std::shared_ptr<Client>, std::string)>;
     void on_connect(OnConnectFunc func) { _on_connect = func;
@@ -101,7 +111,7 @@ class UdpServer:  public StreamSource {
 public:
     enum Mode { UNICAST, BROADCAST, MULTICAST };
     virtual auto address(const std::string& address) -> UdpServer& = 0;
-    virtual auto interface(const std::string& interface) -> UdpServer& = 0;
+    virtual auto interface(const std::string& interface, int family = AF_INET) -> UdpServer& = 0;
     virtual auto service_port_range(uint16_t min, uint16_t max) -> UdpServer& = 0;
     virtual auto ttl(uint8_t ttl_) -> UdpServer& = 0;
 

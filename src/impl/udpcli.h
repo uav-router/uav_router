@@ -13,6 +13,7 @@ using namespace std::chrono_literals;
 #include "../loop.h"
 #include "../log.h"
 #include "statobj.h"
+#include "yaml.h"
 
 
 
@@ -35,13 +36,11 @@ public:
 class UdpClientImpl : public UdpClient, public IOPollable, public ServiceEvents {
 public:
     UdpClientImpl(const std::string name, IOLoopSvc* loop):IOPollable(name),_loop(loop),_resolv(loop->address()),_timer(loop->timer()) {
-        //_timer->shoot([this](){ connect(); });
+        _cnt = std::make_shared<StatCounters>("udpcli");
+        _cnt->tags.push_front({"endpoint",name});
         auto on_err = [this,name](error_c& ec){ on_error(ec,name);};
         _resolv->on_error(on_err);
         _timer->on_error(on_err);
-        _cnt = std::make_shared<StatCounters>("udpcli");
-        _cnt->tags.push_front({"endpoint",name});
-        loop->stats()->register_report(_cnt, 1s);
     }
 
     ~UdpClientImpl() override {
@@ -57,6 +56,46 @@ public:
             _fd = -1;
         }
     }
+
+#ifdef YAML_CONFIG
+    auto init(YAML::Node cfg) -> error_c override {
+        _cnt = std::make_shared<StatCounters>("udpcli");
+        _cnt->tags.push_front({"endpoint",name});
+        auto statcfg = cfg["stat"];
+        if (statcfg && statcfg.IsMap()) {
+            auto period = duration(statcfg["period"]);
+            if (period.count()) { 
+                _loop->stats()->register_report(_cnt, period);
+            }
+            auto tags = statcfg["tags"];
+            if (tags && tags.IsMap()) {
+                for(auto tag : tags) {
+                    _cnt->tags.push_front(std::make_pair(tag.first.as<std::string>(),tag.second.as<std::string>()));
+                }
+            }
+        }
+        std::string itf;
+        if (cfg["interface"]) itf = cfg["interface"].as<std::string>();
+        if (cfg["service"]) {
+            return init_service(cfg["service"].as<std::string>(),itf);
+        }
+        UdpServer::Mode mode = udp_type(cfg["type"]);
+        
+        if (!cfg["port"]) return errno_c(ENOTSUP,"no port udp client");
+        int port = cfg["port"].as<int>();
+        int family = address_family(cfg["family"]);
+        std::string address = cfg["address"].as<std::string>();
+        if (mode==UdpServer::Mode::UNICAST) {
+            return init(address,port,family);
+        } 
+        if (mode==UdpServer::Mode::BROADCAST) {
+            return init_broadcast(port,itf);
+        }
+        int ttl = 0;
+        if (cfg["ttl"]) ttl = cfg["ttl"].as<int>();
+        return init_multicast(address,port,itf,ttl);
+    }
+#endif
 
     auto init(const std::string& host, uint16_t port, int family=AF_UNSPEC) -> error_c override {
         if (_addr.init(host,port)) { return create(SockAddr::any(_addr.family()));

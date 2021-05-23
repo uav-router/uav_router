@@ -11,15 +11,18 @@ using namespace std::chrono_literals;
 #include "../loop.h"
 #include "../log.h"
 #include "statobj.h"
-
+#include "yaml.h"
 
 class TCPServerStream : public Client, public IOPollable {
 public:
-    TCPServerStream(const std::string& name, int fd, IOLoopSvc* loop):IOPollable(name), _fd(fd),_poll(loop->poll()) {
+    TCPServerStream(const std::string& name, int fd, IOLoopSvc* loop, std::chrono::nanoseconds stat_period, std::forward_list<std::pair<std::string,std::string>>& tags):IOPollable(name), _fd(fd),_poll(loop->poll()) {
         _poll->add(_fd, EPOLLIN | EPOLLOUT | EPOLLET, this);
         _cnt = std::make_shared<StatCounters>("tcpsvr");
+        _cnt->tags = tags;
         _cnt->tags.push_front({"endpoint",name});
-        loop->stats()->register_report(_cnt, 1s);
+        if (stat_period.count()) {
+            loop->stats()->register_report(_cnt, stat_period);
+        }
     }
     ~TCPServerStream() override { 
         _exists = false;
@@ -147,6 +150,36 @@ public:
         cleanup();
     }
     //TcpServer
+
+#ifdef YAML_CONFIG
+    auto init(YAML::Node cfg) -> error_c override {
+        auto statcfg = cfg["stat"];
+        if (statcfg && statcfg.IsMap()) {
+            auto period = duration(statcfg["period"]);
+            if (period.count()) {
+                stat_period = period;
+            }
+            auto tags = statcfg["tags"];
+            if (tags && tags.IsMap()) {
+                for(auto tag : tags) {
+                    stat_tags.push_front(make_pair(tag.first.as<std::string>(),tag.second.as<std::string>()));
+                }
+            }
+        }
+        int family = address_family(cfg["family"]);
+        if (family==AF_UNSPEC) family = AF_INET;
+        std::string data;
+        if (cfg["interface"]) data = cfg["interface"].as<std::string>();
+        if (!data.empty()) interface(data,family);
+        data.clear();
+        if (cfg["address"]) data = cfg["address"].as<std::string>();
+        if (!data.empty()) address(data);
+        uint16_t port = 0;
+        if (cfg["port"]) port = cfg["port"].as<int>();
+        return init(port,family);
+    }
+#endif
+
     auto init(uint16_t port, int family) -> error_c override {
         if (!_address.empty()) {
             error_c ec = _addr.init(_address, port);
@@ -363,7 +396,7 @@ public:
                 name = client_addr.format(SockAddr::REG_SERVICE);
             }
             std::shared_ptr<TCPServerStream> cli =
-                std::make_shared<TCPServerStream>(name, client, _loop);
+                std::make_shared<TCPServerStream>(name, client, _loop, stat_period, stat_tags);
             cli->on_error([this](error_c ec){on_error(ec);});
             cli->writeable();
             on_connect(cli, name);
@@ -391,6 +424,8 @@ public:
     int _fd = -1;
     bool _exists = true;
     IOLoopSvc* _loop;
+    std::chrono::nanoseconds stat_period = 1s;
+    std::forward_list<std::pair<std::string,std::string>> stat_tags;
     std::unique_ptr<AddressResolver> _resolv;
     std::unique_ptr<AvahiGroup> _group;
     std::unique_ptr<Timer> _timer;

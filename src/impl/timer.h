@@ -72,7 +72,7 @@ public:
         }
     }
 
-    auto armed() -> bool { return _fd!=-1;
+    auto armed() -> bool override { return _fd!=-1;
     }
 
     void cleanup() override {

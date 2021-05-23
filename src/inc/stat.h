@@ -2,6 +2,7 @@
 #define __STAT_INC_H__
 #include "metric.h"
 #include <memory>
+#include <forward_list>
 
 // Class to send measurements
 class OStat {
@@ -17,6 +18,8 @@ class Stat {
 public:
     virtual void report(OStat& out) = 0;
     virtual ~Stat() = default;
+
+    std::forward_list<std::pair<std::string,std::string>> tags;
 };
 
 class OStatEndpoint : public OStat {

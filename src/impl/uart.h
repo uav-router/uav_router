@@ -18,6 +18,7 @@ using namespace std::chrono_literals;
 
 #include "fd.h"
 #include "statobj.h"
+#include "yaml.h"
 
 std::map<int, speed_t> bauds = {
     {0,      B0},
@@ -96,11 +97,9 @@ class UARTImpl : public UART, public IOPollable, public UdevEvents {
         UdevEvents* _obj;
     };
 public:
-    UARTImpl(std::string name, IOLoopSvc* loop): IOPollable("uart"), _name(std::move(name)), _poll(loop->poll()), _udev(loop->udev()) {
+    UARTImpl(std::string name, IOLoopSvc* loop): IOPollable("uart"), _name(std::move(name)), _poll(loop->poll()), _udev(loop->udev()), _stat(loop->stats()) {
         _timer = loop->timer();
         _timer->shoot([this]() { init_uart_retry(); });
-        cnt = std::make_shared<StatCounters>(name+"_uart_c");
-        loop->stats()->register_report(cnt, 1s);
     }
     ~UARTImpl() override {
         if (_fd != -1) { _poll->del(_fd, this);
@@ -109,6 +108,8 @@ public:
         _exists = false;
     }
     auto init(const std::string& path, int baudrate=115200, bool flow_control=false) -> error_c override {
+        cnt = std::make_shared<StatCounters>(_name+"_uart_c");
+        _stat->register_report(cnt, 1s);
         _path = path;
         _baudrate = baudrate;
         _flow_control = flow_control;
@@ -117,6 +118,40 @@ public:
         init_uart_retry();
         return error_c();
     }
+
+#ifdef YAML_CONFIG
+    auto init(YAML::Node cfg) -> error_c override {
+        if (!cfg["path"]) return errno_c(ENOTSUP,"uart device path");
+        _path = cfg["path"].as<std::string>();
+        _baudrate = 115200;
+        if (cfg["baudrate"]) _baudrate = cfg["baudrate"].as<int>();
+        _flow_control = false;
+        if (cfg["flow_control"]) _flow_control = cfg["flow_control"].as<bool>();
+        auto on_err = [this](error_c& ec){ on_error(ec,_name);};
+        _timer->on_error(on_err);
+        cnt = std::make_shared<StatCounters>(_name+"_uart_c");
+        auto statcfg = cfg["stat"];
+        if (statcfg && statcfg.IsMap()) {
+            std::chrono::nanoseconds period = 1s;
+            auto stat_period = duration(statcfg["period"]);
+            if (stat_period.count()) { period = stat_period;
+            } else {
+                log.error()<<"Unreadable stat duration "<<statcfg["period"].as<std::string>()<<std::endl;
+            }
+            auto tags = statcfg["tags"];
+            if (tags && tags.IsMap()) {
+                for(auto tag : tags) {
+                    std::string key = tag.first.as<std::string>();
+                    std::string val = tag.second.as<std::string>();
+                    cnt->tags.push_front(std::make_pair(key,val));
+                }
+            }
+            _stat->register_report(cnt, period);
+        }
+        init_uart_retry();
+        return error_c();
+    }
+#endif
 
     void init_uart_retry() {
         error_c ret = init_uart();
@@ -323,6 +358,7 @@ public:
 
     Poll* _poll;
     UdevLoop* _udev;
+    StatHandler* _stat;
     std::unique_ptr<Timer> _timer;
     inline static Log::Log log {"uart"};
     std::shared_ptr<StatCounters> cnt;

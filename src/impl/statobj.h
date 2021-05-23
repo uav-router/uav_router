@@ -54,7 +54,6 @@ public:
         }
     }
     std::map<std::string,DurationCollector> time;
-    std::forward_list<std::pair<std::string,std::string>> tags;
 private:
     std::string _name;
 };
@@ -84,7 +83,6 @@ public:
         v.second = true;
     }
 
-    std::forward_list<std::pair<std::string,std::string>> tags;
 private:
     std::map<std::string,std::pair<int,bool>> values;
     std::string _name;
@@ -97,7 +95,11 @@ public:
         std::string name = _names[index];
         if (name.empty()) name = "ev_"+std::to_string(index);
         _events.emplace_front(_name);
-        _events.front().add_field(name, ++_counter[index]);
+        auto& meter = _events.front();
+        meter.add_field(name, ++_counter[index]);
+        for(auto& tag: tags) {
+            meter.add_tag(tag.first, tag.second);
+        }
         while (_events.size()>max_events) _events.pop_back();
         return _events.front();
     }
