@@ -4,6 +4,9 @@
 #include <cstdint>
 #include <cstring>
 #include <memory>
+#include <set>
+#include <map>
+#include <chrono>
 
 #include "filterbase.h"
 
@@ -120,6 +123,78 @@ private:
     enum State {BEFORE,LEN, LOAD};
     State state = BEFORE;
     int packet_len = 0;
+};
+
+class Mavlink_v1_filter : public FilterBase {
+public:
+    enum Type {SYSID, COMPID, SYSID_COMPID};
+    auto write(const void* buf, int len) -> int override {
+        const auto* packet = (const uint8_t*)buf;
+        if (passed(packet[3],packet[4],packet[5])) {
+            return write_next(buf,len);
+        }
+        return write_rest(buf,len);
+    }
+    auto passed(uint8_t sysid, uint8_t compid, uint8_t msgid) -> bool {
+        if (sys.size()) {
+            int value = sysid;
+            if (type==COMPID) { value = compid;
+            } else if (type==SYSID_COMPID) { value += int(compid)<<8;
+            }
+            auto found = sys.find(value)!=sys.end();
+            if (allow_sys ^ found) { 
+                cnt->add("sysfilter",1);
+                return false;
+            }
+        }
+        if (msg.size()) {
+            auto found = msg.find(msgid)!=sys.end();
+            if (allow_msg ^ found) { 
+                cnt->add("msgfilter",1);
+                return false;
+            }
+        }
+        if (silence_period.size()) {
+            auto ptr = silence_period.find(msgid);
+            if (ptr==silence_period.end()) { return true;
+            }
+            auto now = std::chrono::steady_clock::now();
+            if ((now-last_send_time[msgid])<ptr->second) {
+                cnt->add("freqfilter",1);
+                return false;
+            }
+            last_send_time[msgid] = now;
+        }
+        return true;
+    }
+    void sys_filter(bool allow, Type t, std::vector<int> value) {
+        allow_sys = allow;
+        type = t;
+        sys.clear();
+        for(auto v: value) { sys.insert(v);
+        }
+    }
+
+    void msg_filter(bool allow, std::vector<int> value) {
+        allow_sys = allow;
+        msg.clear();
+        for(auto v: value) { msg.insert(v);
+        }
+    }
+
+    void freq_filter(std::map<int,int> max_freq) {
+        for(auto& el : max_freq) {
+            silence_period[el.first] = std::chrono::nanoseconds(1000000000/el.second);
+        }
+    }
+private:
+    std::set<int> sys;
+    bool allow_sys = false;
+    Type type;
+    std::set<int> msg;
+    bool allow_msg = false;
+    std::map<int,std::chrono::nanoseconds> silence_period;
+    std::map<int,std::chrono::time_point<std::chrono::steady_clock>> last_send_time;
 };
 
 
