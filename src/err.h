@@ -9,57 +9,45 @@
 
 class error_c : public std::error_code {
 public:
-    error_c(int ec=0, const std::error_category& ecat=std::system_category(), std::string  place = "") noexcept 
-        : std::error_code(ec, ecat), _place(std::move(place)) {}
-    void add_place(const std::string& place) {
-        _place = place + "->" + _place;
+    error_c(int ec=0, const std::error_category& ecat=std::system_category(), std::string  context = "") noexcept 
+        : std::error_code(ec, ecat), _context(std::move(context)) {}
+    void add_context(const std::string& context) {
+        _context = context + "->" + _context;
     }
-    [[nodiscard]] auto place() const -> std::string;
+    [[nodiscard]] auto context() const -> std::string;
 
-  private:
-    std::string _place;
+private:
+    std::string _context;
 };
 
 auto operator<<(std::ostream& out, const error_c& ec ) -> std::ostream&;
 
 class errno_c : public error_c {
 public:
-    errno_c(int val, const std::string& place = ""):error_c(val, std::system_category(),place) {}
-    errno_c(const std::string& place = ""):error_c(errno, std::system_category(),place) {}
+    errno_c(int val, const std::string& context = ""):error_c(val, std::system_category(),context) {}
+    errno_c(const std::string& context = ""):error_c(errno, std::system_category(),context) {}
 };
 
-inline auto err_chk(int ret, const std::string& place="") -> errno_c {
-    if (ret) return errno_c(place);
+inline auto to_errno_c(int ret, const std::string& context="") -> errno_c {
+    if (ret) return errno_c(context);
     return errno_c(0);
 }
 
-
-auto eai_category() -> const std::error_category &;
-
 class eai_code : public error_c {
 public:
-    eai_code(int val=0, const std::string& place="");
-    eai_code(gaicb* req, const std::string& place="");
+    eai_code(int val=0, const std::string& context="");
+    eai_code(gaicb* req, const std::string& context="");
 };
-
-inline void eai_check(const eai_code& ret, const std::string& from) {
-    if (ret) throw std::system_error(ret, from);
-}
-
-auto avahi_category() -> const std::error_category &;
 
 class avahi_code : public error_c {
 public:
-    avahi_code(int val=0, const std::string& place="");
+    avahi_code(int val=0, const std::string& context="");
 };
 
 class regex_code : public error_c {
 public:
-    regex_code(int val=0, const std::string& place="");
+    regex_code(int val=0, const std::string& context="");
 };
-
-auto regex_category() -> const std::error_category &;
-
 
 class error_handler {
 public:
@@ -68,9 +56,9 @@ public:
     inline void on_error(callback_t func) { _on_error = func;
     }
 protected:
-    auto on_error(error_c& ec, const std::string& place) -> bool;
+    auto on_error(error_c& ec, const std::string& context) -> bool;
     auto on_error(error_c ec) -> bool;
-    auto on_error(int ret, const std::string& place = "") -> bool;
+    auto on_error(int ret, const std::string& context = "") -> bool;
 private:
     callback_t _on_error;
 };

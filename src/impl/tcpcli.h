@@ -190,7 +190,7 @@ public:
         //    close(_fd);
         //    return ret;
         //}
-        error_c ret = err_chk(setsockopt(_fd,SOL_SOCKET,SO_KEEPALIVE,&yes,sizeof(yes)),"keepalive");
+        error_c ret = to_errno_c(setsockopt(_fd,SOL_SOCKET,SO_KEEPALIVE,&yes,sizeof(yes)),"keepalive");
         if (ret) { return ret;
         }
         canon_peer_name.clear();
@@ -256,7 +256,7 @@ public:
 
     void cleanup() override {
         if (_fd != -1) {
-            on_error(err_chk(close(_fd),"close"));
+            on_error(to_errno_c(close(_fd),"close"));
             _fd = -1;
         }
     }
@@ -264,7 +264,7 @@ public:
     auto error() -> bool {
         int ec;
         socklen_t len = sizeof(ec);
-        errno_c ret = err_chk(getsockopt(_fd, SOL_SOCKET, SO_ERROR, &ec, &len),"getsockopt");
+        errno_c ret = to_errno_c(getsockopt(_fd, SOL_SOCKET, SO_ERROR, &ec, &len),"getsockopt");
         on_error(ret);
         if (ret) return true;
         return false;
@@ -274,7 +274,7 @@ public:
         if (error()) return HANDLED;
         while(true) {
             int sz;
-            error_c ret = err_chk(ioctl(_fd, FIONREAD, &sz),"tcp ioctl");
+            error_c ret = to_errno_c(ioctl(_fd, FIONREAD, &sz),"tcp ioctl");
             if (ret) {
                 on_error(ret, "Query buffer size error");
                 if (!_exists) return STOP;

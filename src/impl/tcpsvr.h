@@ -34,14 +34,14 @@ public:
     auto check() -> errno_c {
         int ec;
         socklen_t len = sizeof(ec);
-        errno_c ret = err_chk(getsockopt(_fd, SOL_SOCKET, SO_ERROR, &ec, &len),"getsockopt");
+        errno_c ret = to_errno_c(getsockopt(_fd, SOL_SOCKET, SO_ERROR, &ec, &len),"getsockopt");
         if (ret) return ret;
         return errno_c(ec,"socket error");
     }
     auto epollIN() -> int override {
         while(true) {
             int sz;
-            errno_c ret = err_chk(ioctl(_fd, FIONREAD, &sz),"tcp ioctl");
+            errno_c ret = to_errno_c(ioctl(_fd, FIONREAD, &sz),"tcp ioctl");
             if (ret) {
                 on_error(ret, "Query data size error");
                 if (!_exists) return STOP;
@@ -277,7 +277,7 @@ public:
     }
 
     auto listen_socket() -> error_c {
-        error_c ret = err_chk(listen(_fd,5),"listen");
+        error_c ret = to_errno_c(listen(_fd,5),"listen");
         if (ret) { // && ret!=std::error_condition(std::errc::operation_in_progress)) {
             close(_fd);
             _fd = -1;
@@ -340,7 +340,7 @@ public:
     auto check() -> errno_c {
         int ec;
         socklen_t len = sizeof(ec);
-        errno_c ret = err_chk(getsockopt(_fd, SOL_SOCKET, SO_ERROR, &ec, &len),"getsockopt");
+        errno_c ret = to_errno_c(getsockopt(_fd, SOL_SOCKET, SO_ERROR, &ec, &len),"getsockopt");
         if (ret) return ret;
         return errno_c(ec,"socket error");
     }
@@ -364,7 +364,7 @@ public:
                 return HANDLED;
             }
             int yes = 1;
-            errno_c ret = err_chk(setsockopt(client,SOL_SOCKET,SO_KEEPALIVE,&yes,sizeof(yes)),"keepalive");
+            errno_c ret = to_errno_c(setsockopt(client,SOL_SOCKET,SO_KEEPALIVE,&yes,sizeof(yes)),"keepalive");
             if (ret) { 
                 on_error(ret); 
                 close(client); 

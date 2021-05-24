@@ -85,7 +85,7 @@ public:
                 if (cli) { cli->on_close();
                 }
             }
-            on_error(err_chk(close(_fd),"close"));
+            on_error(to_errno_c(close(_fd),"close"));
             _fd = -1;
         }
 
@@ -186,7 +186,7 @@ public:
                 addr.set_port(port);
             }
             int yes = 1;
-            error_c ret = err_chk(setsockopt(_fd,SOL_SOCKET,SO_REUSEADDR,&yes,sizeof(yes)),"reuseaddr");
+            error_c ret = to_errno_c(setsockopt(_fd,SOL_SOCKET,SO_REUSEADDR,&yes,sizeof(yes)),"reuseaddr");
             if (ret) return ret;
             ret = addr.bind(_fd);
             if (ret) return ret;
@@ -202,10 +202,10 @@ public:
                 addr.set_port(port);
             }
             int yes = 1;
-            error_c ret = err_chk(setsockopt(_fd, SOL_SOCKET, SO_REUSEPORT, &yes, sizeof(yes)),"reuse port");
+            error_c ret = to_errno_c(setsockopt(_fd, SOL_SOCKET, SO_REUSEPORT, &yes, sizeof(yes)),"reuse port");
             if (ret) {
                 log.warning()<<"Multicast settings: "<<ret<<std::endl;
-                ret = err_chk(setsockopt(_fd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes)),"multicast reuseaddr");
+                ret = to_errno_c(setsockopt(_fd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes)),"multicast reuseaddr");
                 if (ret) return ret;
             }
             SockAddr any = SockAddr::any(addr.family(), port);
@@ -216,13 +216,13 @@ public:
                 memset(&mreq,0,sizeof(mreq));
                 mreq.imr_multiaddr.s_addr = addr.ip4_addr_t();
                 mreq.imr_ifindex = _itf.second;
-                ret = err_chk(setsockopt(_fd, IPPROTO_IP, IP_ADD_MEMBERSHIP, &mreq, sizeof(mreq)),"add membership");
+                ret = to_errno_c(setsockopt(_fd, IPPROTO_IP, IP_ADD_MEMBERSHIP, &mreq, sizeof(mreq)),"add membership");
                 if (ret) return ret;
             } else { // AF_INET6
                 ipv6_mreq mreq;
                 memcpy(mreq.ipv6mr_multiaddr.s6_addr,addr.ip6_addr(),sizeof(in6_addr));
                 mreq.ipv6mr_interface = _itf.second;
-                ret = err_chk(setsockopt(_fd, IPPROTO_IP, IP_ADD_MEMBERSHIP, &mreq, sizeof(mreq)),"add membership");
+                ret = to_errno_c(setsockopt(_fd, IPPROTO_IP, IP_ADD_MEMBERSHIP, &mreq, sizeof(mreq)),"add membership");
                 if (ret) return ret;
             }
         }
@@ -334,7 +334,7 @@ public:
     auto epollIN() -> int override {
         while(true) {
             int sz;
-            errno_c ret = err_chk(ioctl(_fd, FIONREAD, &sz),"udp ioctl");
+            errno_c ret = to_errno_c(ioctl(_fd, FIONREAD, &sz),"udp ioctl");
             if (ret) {
                 on_error(ret, "Query datagram size error");
             } else {

@@ -32,14 +32,14 @@ public:
             errno_c ret = _poll->add(_fd, EPOLLIN, this);
             if (ret) {
                 close(_fd);
-                ret.add_place("loop add");
+                ret.add_context("loop add");
                 _fd = -1;
                 return ret;
             }
         }
-        auto ret = err_chk(timerfd_settime(_fd, flags, value, nullptr));
+        auto ret = to_errno_c(timerfd_settime(_fd, flags, value, nullptr));
         if (ret) {
-            ret.add_place("timerfd_settime");
+            ret.add_context("timerfd_settime");
         }
         return ret;
     };

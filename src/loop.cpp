@@ -41,9 +41,9 @@ public:
         on_error([](error_c& ec){ log.error()<<"ioloop"<<ec<<std::endl;} );
         errno_c ret = _epoll.create();
         if (ret) {
-            ret.add_place("IOLoop");
+            ret.add_context("IOLoop");
             log.error()<<ret<<std::endl;
-            throw std::system_error(ret, ret.place());
+            throw std::system_error(ret, ret.context());
         }
     }
     // loop items

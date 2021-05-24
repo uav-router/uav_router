@@ -24,7 +24,7 @@ public:
         if (ptr) { ev.data.ptr = ptr;
         } else { ev.data.fd = fd;
         }
-        return err_chk(epoll_ctl(efd, EPOLL_CTL_ADD, fd, &ev), "epoll_ctl add");
+        return to_errno_c(epoll_ctl(efd, EPOLL_CTL_ADD, fd, &ev), "epoll_ctl add");
     }
     auto mod(int fd, uint32_t events, void* ptr = nullptr) -> errno_c {
         epoll_event ev;
@@ -32,11 +32,11 @@ public:
         if (ptr) { ev.data.ptr = ptr;
         } else { ev.data.fd = fd;
         }
-        return err_chk(epoll_ctl(efd, EPOLL_CTL_MOD, fd, &ev), "epoll_ctl mod");
+        return to_errno_c(epoll_ctl(efd, EPOLL_CTL_MOD, fd, &ev), "epoll_ctl mod");
     }
     auto del(int fd) -> errno_c {
         epoll_event ev;
-        return err_chk(epoll_ctl(efd, EPOLL_CTL_DEL, fd, &ev), "epoll_ctl del");
+        return to_errno_c(epoll_ctl(efd, EPOLL_CTL_DEL, fd, &ev), "epoll_ctl del");
     }
     auto wait(epoll_event *events, int maxevents, int timeout = -1, const sigset_t *sigmask = nullptr) -> int {
         if (sigmask) return epoll_pwait(efd, events, maxevents, timeout, sigmask);

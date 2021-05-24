@@ -22,9 +22,9 @@ public:
         if (ret) return avahi_code(ret,"avahi_client_new");
         return avahi_code(ret);
     }
-    auto error(std::string place="") -> error_c {
+    auto error(std::string context="") -> error_c {
         int ret = avahi_client_errno(_client);
-        if (ret) return avahi_code(ret,place);
+        if (ret) return avahi_code(ret,context);
         return avahi_code(ret);
     }
     auto get() -> AvahiClient * { return _client; }
@@ -132,10 +132,10 @@ public:
     void on_all_for_now(OnEvent func) {_on_all_for_now = func;}
     void on_cache_exhausted(OnEvent func) {_on_cache_exhausted = func;}
 
-    auto error(std::string place) -> error_c {
+    auto error(std::string context) -> error_c {
         int ret = avahi_client_errno(avahi_service_browser_get_client(_sb));
         if (ret==0) return error_c(0);
-        return avahi_code(ret,place);
+        return avahi_code(ret,context);
     }
     auto client() -> AvahiClient * {
         return avahi_service_browser_get_client(_sb);

@@ -52,7 +52,7 @@ public:
                 if (cli) { cli->on_close();
                 }
             }
-            on_error(err_chk(close(_fd),"close"));
+            on_error(to_errno_c(close(_fd),"close"));
             _fd = -1;
         }
     }
@@ -198,7 +198,7 @@ public:
     auto init_multicast(const std::string& address, uint16_t port, const std::string& interface="", uint8_t ttl = 0) -> error_c override {
         error_c ret = _addr.init(address,port);
         if (ret) {
-            ret.add_place("multicast address");
+            ret.add_context("multicast address");
             return ret;
         }
         ip_mreqn req;
@@ -240,26 +240,26 @@ public:
         }
         if (broadcast) {
             int yes = 1;
-            errno_c ret = err_chk(setsockopt(_fd, SOL_SOCKET, SO_BROADCAST, (void *) &yes, sizeof(yes)),"setsockopt(broadcast)");
+            errno_c ret = to_errno_c(setsockopt(_fd, SOL_SOCKET, SO_BROADCAST, (void *) &yes, sizeof(yes)),"setsockopt(broadcast)");
             if (ret) return ret;
         } else if (itf) { // multicast socket
             if (family==AF_INET) {
                 if (ttl) {
-                    errno_c ret = err_chk(setsockopt(_fd, IPPROTO_IP, IP_MULTICAST_TTL, (void *)&ttl, sizeof(ttl)),"multicast ttl");
+                    errno_c ret = to_errno_c(setsockopt(_fd, IPPROTO_IP, IP_MULTICAST_TTL, (void *)&ttl, sizeof(ttl)),"multicast ttl");
                     if (ret) return ret;
                 }
                 if (itf->imr_address.s_addr!=htonl(INADDR_ANY) || itf->imr_ifindex) {
-                    errno_c ret = err_chk(setsockopt(_fd, IPPROTO_IP, IP_MULTICAST_IF, itf, sizeof(*itf)),"multicast itf");
+                    errno_c ret = to_errno_c(setsockopt(_fd, IPPROTO_IP, IP_MULTICAST_IF, itf, sizeof(*itf)),"multicast itf");
                     if (ret) return ret;
                 }
             } else {
                 if (ttl) {
-                    errno_c ret = err_chk(setsockopt(_fd, IPPROTO_IPV6, IPV6_MULTICAST_HOPS, (void *)&ttl, sizeof(ttl)),"multicast ttl");
+                    errno_c ret = to_errno_c(setsockopt(_fd, IPPROTO_IPV6, IPV6_MULTICAST_HOPS, (void *)&ttl, sizeof(ttl)),"multicast ttl");
                     if (ret) return ret;
                 }
                 
                 if (itf->imr_ifindex) {
-                    errno_c ret = err_chk(setsockopt(_fd, IPPROTO_IPV6, IPV6_MULTICAST_IF, &itf->imr_ifindex, sizeof(itf->imr_ifindex)),"multicast itf");
+                    errno_c ret = to_errno_c(setsockopt(_fd, IPPROTO_IPV6, IPV6_MULTICAST_IF, &itf->imr_ifindex, sizeof(itf->imr_ifindex)),"multicast itf");
                     if (ret) return ret;
                 }
             }
@@ -323,7 +323,7 @@ public:
     auto epollIN() -> int override {
         while(true) {
             int sz;
-            errno_c ret = err_chk(ioctl(_fd, FIONREAD, &sz),"udp ioctl");
+            errno_c ret = to_errno_c(ioctl(_fd, FIONREAD, &sz),"udp ioctl");
             if (ret) {
                 on_error(ret, "Query datagram size error");
             } else {

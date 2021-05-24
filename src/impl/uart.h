@@ -204,11 +204,11 @@ public:
         const auto& b = bauds.find(_baudrate);
         if (b == bauds.end()) return errno_c(EINVAL,"uart "+_path+" open");
         struct termios tty;
-        error_c ret = err_chk(tcgetattr(_fd, &tty),"tcgetaddr");
+        error_c ret = to_errno_c(tcgetattr(_fd, &tty),"tcgetaddr");
         if (ret) return ret;
-        ret = err_chk(cfsetospeed(&tty, b->second),"cfsetospeed");
+        ret = to_errno_c(cfsetospeed(&tty, b->second),"cfsetospeed");
         if (ret) return ret;
-        ret = err_chk(cfsetispeed(&tty, b->second),"cfsetispeed");
+        ret = to_errno_c(cfsetispeed(&tty, b->second),"cfsetispeed");
         if (ret) return ret;
         tty.c_cflag = (tty.c_cflag & ~CSIZE) | CS8 | CLOCAL | CREAD;
         if (_flow_control) tty.c_cflag |= CRTSCTS;
@@ -220,22 +220,22 @@ public:
         tty.c_oflag = 0;
         tty.c_cc[VMIN] = 0;
         tty.c_cc[VTIME] = 0;
-        ret = err_chk(tcsetattr(_fd, TCSANOW, &tty),"tcsetaddr");
+        ret = to_errno_c(tcsetattr(_fd, TCSANOW, &tty),"tcsetaddr");
         if (ret) return ret;
         
         const int bit_dtr = TIOCM_DTR;
-        ret = err_chk(ioctl(_fd, TIOCMBIS, &bit_dtr),"set dtr "+_path);
+        ret = to_errno_c(ioctl(_fd, TIOCMBIS, &bit_dtr),"set dtr "+_path);
         if (ret) return ret;
         
         const int bit_rts = TIOCM_RTS;
-        ret = err_chk(ioctl(_fd, TIOCMBIS, &bit_rts),"set rts "+_path);
+        ret = to_errno_c(ioctl(_fd, TIOCMBIS, &bit_rts),"set rts "+_path);
         if (ret) return ret;
         
         struct serial_struct serial_ctl;
-        ret = err_chk(ioctl(_fd, TIOCGSERIAL, &serial_ctl),"get serial "+_path);
+        ret = to_errno_c(ioctl(_fd, TIOCGSERIAL, &serial_ctl),"get serial "+_path);
         if (!ret) {
             serial_ctl.flags |= ASYNC_LOW_LATENCY;
-            ret = err_chk(ioctl(_fd, TIOCSSERIAL, &serial_ctl),"set serial "+_path);
+            ret = to_errno_c(ioctl(_fd, TIOCSSERIAL, &serial_ctl),"set serial "+_path);
         }
         if (ret) {
             log.warning()<<"Low latency "<<ret<<std::endl;
@@ -243,7 +243,7 @@ public:
         } else {
             log.info()<<"Open UART with low latency "<<_path<<std::endl;
         }
-        ret = err_chk(ioctl(_fd, TCFLSH, TCIOFLUSH),"flush "+_path);
+        ret = to_errno_c(ioctl(_fd, TCFLSH, TCIOFLUSH),"flush "+_path);
         if (ret) return ret;
         
         watcher.clear();

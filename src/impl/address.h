@@ -49,9 +49,9 @@ public:
         sigset_t mask;
         sigemptyset(&mask);
         sigaddset(&mask, SIGUSR1);
-        errno_c ret = err_chk(sigprocmask(SIG_BLOCK, &mask, nullptr));
+        errno_c ret = to_errno_c(sigprocmask(SIG_BLOCK, &mask, nullptr));
         if (ret) {
-            ret.add_place("sigprocmask");
+            ret.add_context("sigprocmask");
             return ret;
         }
         _sfd = signalfd(-1, &mask, SFD_NONBLOCK);
@@ -60,7 +60,7 @@ public:
         }
         ret = _poll->add(_sfd, EPOLLIN, this);
         if (ret) {
-            ret.add_place("IOLoop add");
+            ret.add_context("IOLoop add");
             close(_sfd);
             return ret;
         }

@@ -229,11 +229,11 @@ auto SockAddr::operator=(const SockAddr& other) -> SockAddr& {
 
 auto SockAddr::bind(int fd) ->error_c {
     if (!_impl) return errno_c(EINVAL,"bind no address");
-    return err_chk(::bind(fd,sock_addr(),_impl->length),"bind");
+    return to_errno_c(::bind(fd,sock_addr(),_impl->length),"bind");
 }
 auto SockAddr::connect(int fd) ->error_c {
     if (!_impl) return errno_c(EINVAL,"connect no address");
-    return err_chk(::connect(fd,sock_addr(),_impl->length),"bind");
+    return to_errno_c(::connect(fd,sock_addr(),_impl->length),"bind");
 }
 
 auto SockAddr::accept(int fd) ->int {
@@ -257,7 +257,7 @@ auto SockAddr::itf(bool broadcast) -> std::string {
     if (!_impl) return std::string();
     std::string itf_name;
     ifaddrs *ifaddr;
-    error_c ret = err_chk(getifaddrs(&ifaddr),"getifaddrs");
+    error_c ret = to_errno_c(getifaddrs(&ifaddr),"getifaddrs");
     if (ret) return std::string();
     for (ifaddrs *ifa = ifaddr; ifa != nullptr; ifa = ifa->ifa_next) {
         if (ifa->ifa_addr == nullptr) continue;
@@ -364,7 +364,7 @@ void SockAddrList::add(SockAddr&& addr) {
 auto SockAddrList::interface(const std::string& name, uint16_t port, int family) -> error_c {
     ifaddrs *ifaddr;
     clear();
-    error_c ret = err_chk(getifaddrs(&ifaddr),"getifaddrs");
+    error_c ret = to_errno_c(getifaddrs(&ifaddr),"getifaddrs");
     if (ret) return ret;
     for (ifaddrs *ifa = ifaddr; ifa != nullptr; ifa = ifa->ifa_next) {
         if (ifa->ifa_addr == nullptr) continue;
@@ -382,7 +382,7 @@ auto SockAddrList::interface(const std::string& name, uint16_t port, int family)
 auto SockAddrList::broadcast(const std::string& name, uint16_t port) -> error_c {
     ifaddrs *ifaddr;
     clear();
-    error_c ret = err_chk(getifaddrs(&ifaddr),"getifaddrs");
+    error_c ret = to_errno_c(getifaddrs(&ifaddr),"getifaddrs");
     if (ret) return ret;
     for (ifaddrs *ifa = ifaddr; ifa != nullptr; ifa = ifa->ifa_next) {
         if (ifa->ifa_addr->sa_family != AF_INET) continue;

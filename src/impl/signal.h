@@ -58,7 +58,7 @@ public:
             sigaddset(&mask, signal);
         }
         _on_signal = handler;
-        error_c ret = err_chk(sigprocmask(SIG_BLOCK, &mask, nullptr),"sigprocmask");
+        error_c ret = to_errno_c(sigprocmask(SIG_BLOCK, &mask, nullptr),"sigprocmask");
         if (ret) return ret;
         _fd = signalfd(-1, &mask, SFD_NONBLOCK);
         if (_fd==-1) {
@@ -66,7 +66,7 @@ public:
             return err;
         }
         ret = _poll->add(_fd, EPOLLIN, this);
-        if (ret) { ret.add_place("loop add");
+        if (ret) { ret.add_context("loop add");
         }
         return ret;
     }
