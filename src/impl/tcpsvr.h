@@ -152,7 +152,7 @@ public:
     //TcpServer
 
 #ifdef YAML_CONFIG
-    auto init(YAML::Node cfg) -> error_c override {
+    auto init_yaml(YAML::Node cfg) -> error_c override {
         auto statcfg = cfg["stat"];
         if (statcfg && statcfg.IsMap()) {
             auto period = duration(statcfg["period"]);

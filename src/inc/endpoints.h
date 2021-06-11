@@ -21,6 +21,7 @@ using OnEventFunc = std::function<void()>;
 
 class Readable : public error_handler {
 public:
+    virtual ~Readable() = default;
     using OnReadFunc  = std::function<void(void*, int)>;
     void on_read(OnReadFunc func) {_on_read = func;}
     virtual auto get_peer_name() -> const std::string& = 0;
@@ -59,8 +60,9 @@ private:
 
 class Configurable {
 public:
+    virtual ~Configurable() = default;
 #ifdef YAML_CONFIG
-    virtual auto init(YAML::Node cfg) -> error_c = 0;
+    virtual auto init_yaml(YAML::Node cfg) -> error_c = 0;
 #endif //YAML_CONFIG
 };
 
@@ -119,7 +121,7 @@ public:
 };
 
 #include "stat.h"
-class Endpoint : public error_handler, public Writeable {
+class Endpoint : public error_handler, public Writeable, public Configurable {
 public:
     virtual auto stat() -> std::shared_ptr<Stat> = 0;
 };
@@ -130,10 +132,11 @@ public:
     }
 protected:
     virtual auto write_next(const void* buf, int len) -> int {
-        if (!_next.expired())  return _next.lock()->write(buf,len);
-        return 0;
+        //if (!_next.expired())  return _next.lock()->write(buf,len);
+        if (!_next) return 0;
+        return _next->write(buf,len);
     }
-    std::weak_ptr<Writeable> _next;
+    std::shared_ptr<Writeable> _next;
 };
 
 class Filter : public Pipe {
@@ -142,10 +145,12 @@ public:
     }
 protected:
     virtual auto write_rest(const void* buf, int len) -> int {
-        if (!_rest.expired())  return _rest.lock()->write(buf,len);
-        return 0;
+        //if (!_rest.expired())  return _rest.lock()->write(buf,len);
+        //return 0;
+        if (!_rest) return 0;
+        return _rest->write(buf,len);
     }
-    std::weak_ptr<Writeable> _rest;
+    std::shared_ptr<Writeable> _rest;
 };
 
 #endif //__ENDPOINTS_H__

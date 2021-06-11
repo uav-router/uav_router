@@ -10,6 +10,11 @@ class NMEA : public FilterBase {
 public:
     enum {PREAMBLE='$'};
     NMEA():FilterBase("NMEA") {}
+#ifdef  YAML_CONFIG
+    auto init_yaml(YAML::Node cfg) -> error_c override {
+        return error_c();
+    }
+#endif  //YAML_CONFIG
 
     auto write(const void* buf, int len) -> int override {
         auto* ptr = (uint8_t*)buf;

@@ -11,6 +11,12 @@ class UBX : public FilterBase {
 public:
     enum {PREAMBLE0=0xb5, PREAMBLE1=0x62};
     UBX():FilterBase("UBX") {}
+#ifdef  YAML_CONFIG
+    auto init_yaml(YAML::Node cfg) -> error_c override {
+        return error_c();
+    }
+#endif  //YAML_CONFIG
+
     auto write(const void* buf, int len) -> int override {
         auto* ptr = (uint8_t*)buf;
         auto ret = len;

@@ -1,0 +1,421 @@
+#include <exception>
+#include <ioloop.h>
+#include <filters.h>
+#include <log.h>
+#include <memory>
+#include <set>
+#include <string>
+#include <regex>
+#include <tuple>
+
+Log::Log rlog {"router"};
+
+// Collection of endpoints to write the same stream of data
+class Destination : public Writeable {
+public:
+    void add(const std::shared_ptr<Writeable> endpoint) {
+        endpoints[endpoint.get()] = endpoint;
+    }
+    void clear() {
+        endpoints.clear();
+    }
+    auto write(const void* buf, int len) -> int override {
+        if (endpoints.empty()) return 0;
+        if (endpoints.size()==1) {
+            if (endpoints.cbegin()->second.expired()) {
+                endpoints.clear();
+                return 0;
+            }
+            return endpoints.cbegin()->second.lock()->write(buf,len);
+        }
+        for(auto endpoint = endpoints.cbegin(); endpoint != endpoints.cend();) {
+            if (endpoint->second.expired()) {
+                endpoint = endpoints.erase(endpoint);
+            } else {
+                endpoint->second.lock()->write(buf,len);
+                //TODO: partial writes
+                ++endpoint;
+            }
+        }
+        return len;
+    }
+private:
+    std::map<Writeable*,std::weak_ptr<Writeable>> endpoints;
+};
+
+class EndpointStore {
+public:
+    // add regex or endpoint name to table of endpoints
+    void register_name(const std::string& name) {
+        auto& d = endpoints[name] = std::make_shared<Destination>();
+        if (name[0]=='/') {
+            regex_endpoints.emplace_back(std::make_pair(std::regex(name.substr(1)),d));
+        }
+    }
+
+    void register_write_end(const std::string& name, std::shared_ptr<Writeable> sink) {
+        auto& endpoint = endpoints[name];
+        if (endpoint) { endpoint->add(sink);
+        }
+        std::smatch match;
+        for(auto& entry : regex_endpoints) {
+            if (std::regex_match(name,match,entry.first)) {
+                entry.second->add(sink);
+            }
+        }
+    }
+
+    void connect_to_dest(const std::string& name, std::shared_ptr<Destination>& dest) {
+        auto ptr = endpoints.find(name);
+        if (ptr!=endpoints.end()) {
+            dest->add(ptr->second);
+        }
+        if (name[0]=='/') return;
+        std::smatch match;
+        for(auto& entry : regex_endpoints) {
+            if (std::regex_match(name,match,entry.first)) {
+                dest->add(entry.second);
+            }
+        }
+    }
+
+    void clear() {
+        endpoints.clear();
+        regex_endpoints.clear();
+    }
+
+private:
+    std::map<std::string,std::shared_ptr<Destination>> endpoints;
+    std::vector<std::pair<std::regex,std::shared_ptr<Destination>>> regex_endpoints;
+};
+
+EndpointStore endpoint_store;
+
+std::vector<std::tuple<std::string,std::string,YAML::Node>> routes;
+
+bool construct_route(YAML::Node cfg, std::shared_ptr<Destination>& dest, std::vector<std::shared_ptr<Filter>>& filters) {
+    if (cfg.IsScalar())  {
+        endpoint_store.connect_to_dest(cfg.as<std::string>(),dest);
+        return true;
+    }
+    if (cfg.IsSequence()) {
+        for(auto d : cfg) {
+            construct_route(d,dest,filters);
+        }
+        return true;
+    }
+    if (!cfg.IsMap()) { 
+        return false;
+    }
+    auto type = cfg["type"];
+    if (!type) {
+        rlog.error()<<"Unknown filter type"<<std::endl;
+        return false;
+    }
+    auto filter = Filters::create(type.as<std::string>(),cfg);
+    if (!filter) {
+        rlog.error()<<"Create filter type "<<type.as<std::string>()<<" failed."<<std::endl;
+        return false;
+    }
+    filters.push_back(filter);
+    auto dst = cfg["dst"];
+    if (dst) {
+        auto next = std::make_shared<Destination>();
+        filter->chain(next);
+        construct_route(dst,next,filters);
+    }
+    auto rest = cfg["rest"];
+    if (dst) {
+        auto rst = std::make_shared<Destination>();
+        filter->rest(rst);
+        construct_route(dst,rst,filters);
+    }
+    dest->add(filter);
+    return true;
+}
+
+bool equal_name(const std::string& pattern, const std::string& name) {
+    if (pattern[0]=='/') {
+        std::regex rg(pattern.substr(1));
+        std::smatch match;
+        return std::regex_match(name,match,rg);
+    }
+    return pattern==name;
+}
+
+void construct_routes(const std::string& name, std::shared_ptr<Destination>& dest, std::vector<std::shared_ptr<Filter>>& filters) {
+    for(auto& route: routes) {
+        auto [endpoint_name, route_name, dst] = route;
+        if (equal_name(endpoint_name, name)) {
+            construct_route(dst, dest, filters);
+        }
+    }
+}
+
+/*
+Fill named_endpoints & regex_endpoints
+*/
+bool scan_dst(YAML::Node cfg) {
+    if (!cfg) return false;
+    if (cfg.IsScalar()) {
+        endpoint_store.register_name(cfg.as<std::string>());
+        return true;
+    }
+    if (cfg.IsSequence()) {
+        for(auto name : cfg) {
+            if (!scan_dst(name)) return false;
+        }
+        return true;
+    }
+    if (cfg.IsMap()) {
+        auto dst = cfg["dst"];
+        auto rest = cfg["rest"];
+        if (!dst && !rest) { return false;
+        }
+        if (dst) {
+            if (!scan_dst(dst)) return false;
+        }
+        if (rest) {
+            if (!scan_dst(rest)) return false;
+        }
+        return true;
+    }
+    return false;
+}
+
+/*
+Fill routes, named_endpoints & regex_endpoints
+*/
+bool load_routes(YAML::Node cfg) {
+    if (!cfg) {
+        Log::error()<<"No routes section described"<<std::endl;
+        return false;
+    }
+    if (!cfg.IsMap()) {
+        Log::error()<<"Routes section is not a collection of routes"<<std::endl;
+        return false;
+    }
+    for (auto route: cfg) {
+        if (!route.second.IsMap()) {
+            Log::error()<<"Route "<<route.first.as<std::string>()<<" has wrong format"<<std::endl;
+            continue;
+        }
+        auto dst = route.second["dst"];
+        if (!scan_dst(dst)) {
+            Log::error()<<"Route "<<route.first.as<std::string>()<<" has wrong dst"<<std::endl;
+            continue;
+        }
+        
+        auto src = route.second["src"];
+        if (!src) {
+            Log::error()<<"Route "<<route.first.as<std::string>()<<" has no src"<<std::endl;
+            continue;
+        }
+        if (src.IsScalar()) {
+            routes.emplace_back(std::make_tuple(src.as<std::string>(), route.first.as<std::string>(),dst));
+            continue;
+        }
+        if (src.IsSequence()) {
+            for(auto name : src) {
+                routes.emplace_back(std::make_tuple(name.as<std::string>(), route.first.as<std::string>(),dst));
+            }
+        }
+    }
+    return true;
+}
+
+struct SourceEntry {
+    std::shared_ptr<StreamSource> connection;
+    std::shared_ptr<Destination> destination;
+    std::vector<std::shared_ptr<Filter>> filters;
+};
+
+struct ClientEntry {
+    std::shared_ptr<Client> client;
+    std::shared_ptr<Destination> destination;
+    std::vector<std::shared_ptr<Filter>> filters;
+};
+
+std::map<std::string, SourceEntry> source_entries;
+std::map<std::string, ClientEntry> client_entries;
+std::vector<std::shared_ptr<OFileStream>> file_entries;
+
+void setup_endpoint(const std::string& name, std::shared_ptr<StreamSource> endpoint, bool register_write_end = true) {
+    auto& entry = source_entries[name];
+    entry.connection = std::move(endpoint);
+    construct_routes(name,entry.destination,entry.filters);
+    entry.connection->on_error([name](const error_c& ec) {
+        rlog.error()<<"Endpoint ["<<name<<"]:"<<ec<<std::endl;
+    });
+    entry.connection->on_connect([&entry, name, register_write_end](std::shared_ptr<Client> cli, std::string cli_name){
+        if (register_write_end) {
+            endpoint_store.register_write_end(cli_name,cli);
+            endpoint_store.register_write_end(name,cli);
+        }
+        auto& client = client_entries[cli_name];
+        client.client = cli;
+        client.destination->clear();
+        construct_routes(cli_name,client.destination,client.filters);
+        client.destination->add(entry.destination);
+        cli->on_close([cli_name](){
+            client_entries.erase(cli_name);
+        });
+        cli->on_read([&client](void* buf, int len){
+            client.destination->write(buf,len);
+        });
+        cli->on_error([&entry, cli_name](error_c& ec) {
+            entry.connection->on_error(ec,cli_name);
+        });
+    });
+}
+
+bool load_endpoints(std::unique_ptr<IOLoop>& loop, YAML::Node cfg) {
+    if (!cfg) return false;
+    if (!cfg.IsMap()) return false;
+    auto uart = cfg["uart"];
+    if (uart.IsMap()) {
+        for(auto port : uart) {
+            auto name = port.first.as<std::string>();
+            try {
+                auto endpoint = loop->uart(name);
+                if (endpoint) {
+                    error_c ret = endpoint->init_yaml(port.second);
+                    if (ret) { rlog.error()<<"Init UART endpoint "<<name<<" error "<<ret<<std::endl;
+                    } else {   setup_endpoint(name,std::move(endpoint));
+                    }
+                }
+            } catch(std::exception &e) {
+                rlog.error()<<"Exception while construct uart "<<name<<" "<<e.what()<<std::endl;
+            }
+        }
+    }
+    auto tcp = cfg["tcp"];
+    if (tcp.IsMap()) {
+        auto clients = tcp["clients"];
+        if (clients.IsMap()) {
+            // create tcp clients
+            for(auto client : clients) {
+                auto name = client.first.as<std::string>();
+                try {
+                    auto endpoint = loop->tcp_client(name);
+                    if (endpoint) {
+                        error_c ret = endpoint->init_yaml(client.second);
+                        if (ret) { rlog.error()<<"Init tcp client endpoint "<<name<<" error "<<ret<<std::endl;
+                        } else { setup_endpoint(name,std::move(endpoint));
+                        }
+                    }
+                } catch(std::exception &e) {
+                    rlog.error()<<"Exception while construct tcp client "<<name<<" "<<e.what()<<std::endl;
+                }
+            }
+        }
+        auto servers = tcp["servers"];
+        if (servers.IsMap()) {
+            // create tcp servers
+            for(auto server : servers) {
+                auto name = server.first.as<std::string>();
+                try {
+                    auto endpoint = loop->tcp_server(name);
+                    if (endpoint) {
+                        error_c ret = endpoint->init_yaml(server.second);
+                        if (ret) { rlog.error()<<"Init tcp server endpoint "<<name<<" error "<<ret<<std::endl;
+                        } else { setup_endpoint(name,std::move(endpoint));
+                        }
+                    }
+                } catch(std::exception &e) {
+                    rlog.error()<<"Exception while construct tcp server "<<name<<" "<<e.what()<<std::endl;
+                }
+            }
+        }
+    }
+    auto udp = cfg["udp"];
+    if (udp.IsMap()) {
+        auto clients = udp["clients"];
+        if (clients.IsMap()) {
+            // create udp clients
+            for(auto client : clients) {
+                auto name = client.first.as<std::string>();
+                try {
+                    auto endpoint = loop->udp_client(name);
+                    if (endpoint) {
+                        error_c ret = endpoint->init_yaml(client.second);
+                        if (ret) { rlog.error()<<"Init udp client endpoint "<<name<<" error "<<ret<<std::endl;
+                        } else { 
+                            std::shared_ptr<UdpClient> c = std::move(endpoint);
+                            endpoint_store.register_write_end(name,c);
+                            setup_endpoint(name,c,false);
+                        }
+                    }
+                } catch(std::exception &e) {
+                    rlog.error()<<"Exception while construct udp client "<<name<<" "<<e.what()<<std::endl;
+                }
+            }
+        }
+        auto servers = udp["servers"];
+        if (servers.IsMap()) {
+            // create udp servers
+            for(auto server : servers) {
+                for(auto server : servers) {
+                    auto name = server.first.as<std::string>();
+                    try {
+                    auto endpoint = loop->udp_server(name);
+                    if (endpoint) {
+                        error_c ret = endpoint->init_yaml(server.second);
+                        if (ret) { rlog.error()<<"Init udp server endpoint "<<name<<" error "<<ret<<std::endl;
+                        } else { setup_endpoint(name,std::move(endpoint));
+                        }
+                    }
+                    } catch(std::exception &e) {
+                        rlog.error()<<"Exception while construct udp server "<<name<<" "<<e.what()<<std::endl;
+                    }
+                }
+            }
+        }
+    }
+    auto files = cfg["file"];
+    if (files.IsMap()) {
+        //create files
+        for(auto file : files) {
+            if (file.second.IsMap()) {
+                auto f = loop->outfile();
+                error_c ret = f->init_yaml(file.second);
+                auto name = file.first.as<std::string>();
+                if (ret)  {
+                    rlog.error()<<"Init file endpoint "<<name<<" error "<<ret<<std::endl;
+                } else {
+                    auto& of = file_entries.emplace_back(std::move(f));
+                    endpoint_store.register_write_end(name,of);
+                }
+            }
+        }
+    }
+    return true;
+}
+
+void cleanup() {
+    endpoint_store.clear();
+    routes.clear();
+    source_entries.clear();
+    client_entries.clear();
+    file_entries.clear();
+}
+
+int main(int argc, char *argv[]) {
+    auto loop = IOLoop::loop();
+    error_c ec = loop->handle_CtrlC();
+    if (ec) {
+        std::cout<<"Ctrl-C handler error "<<ec<<std::endl;
+        return 1;
+    }
+    std::string config_file_name = "config.yaml";
+    if (argc>1) {
+        config_file_name = argv[1];
+    }
+    std::cout<<"Load config file "<<config_file_name<<std::endl;
+    YAML::Node config = YAML::LoadFile(config_file_name);
+    if (!load_routes(config["routes"])) return 1;
+    if (!load_endpoints(loop, config["endpoints"])) return 1;
+    auto stats = config["stats"];
+    cleanup();
+    return 0;
+}

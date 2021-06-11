@@ -99,25 +99,21 @@ endpoints:
       length: false
 routes:
   route_direct:
-    src:
-      local: name
-      remote: name
+    src: name
     dst:
       - name1
       - name2
-      - regexp
+      - /regexp
   route_filter:
     src:
-      local: name
-      remote: name
+      - name1
+      - name2
     dst:
       name: "filter1"
       type: mavlink
       dst: name3
   route_rest:
-    src:
-      local: name
-      remote: name
+    src: name
     dst:
       type: ubx
       name: fubx

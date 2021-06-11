@@ -60,6 +60,12 @@ class Mavlink_v1 : public FilterBase {
 public:
     enum {STX=0xFE};
     Mavlink_v1(uint8_t* crc_array=crc_extra.data()):FilterBase("mavlink_v1"),_crc_extra(crc_array) {}
+#ifdef  YAML_CONFIG
+    auto init_yaml(YAML::Node cfg) -> error_c override {
+        _crc_extra = crc_extra.data();
+        return error_c();
+    }
+#endif  //YAML_CONFIG
     auto write(const void* buf, int len) -> int override {
         auto* ptr = (uint8_t*)buf;
         auto ret = len;
@@ -128,6 +134,11 @@ private:
 class Mavlink_v1_filter : public FilterBase {
 public:
     enum Type {SYSID, COMPID, SYSID_COMPID};
+#ifdef  YAML_CONFIG
+    auto init_yaml(YAML::Node cfg) -> error_c override {
+        return error_c();
+    }
+#endif  //YAML_CONFIG
     auto write(const void* buf, int len) -> int override {
         const auto* packet = (const uint8_t*)buf;
         if (passed(packet[3],packet[4],packet[5])) {

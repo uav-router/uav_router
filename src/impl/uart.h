@@ -120,7 +120,7 @@ public:
     }
 
 #ifdef YAML_CONFIG
-    auto init(YAML::Node cfg) -> error_c override {
+    auto init_yaml(YAML::Node cfg) -> error_c override {
         if (!cfg["path"]) return errno_c(ENOTSUP,"uart device path");
         _path = cfg["path"].as<std::string>();
         _baudrate = 115200;

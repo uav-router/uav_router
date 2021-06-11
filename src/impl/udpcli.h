@@ -58,7 +58,7 @@ public:
     }
 
 #ifdef YAML_CONFIG
-    auto init(YAML::Node cfg) -> error_c override {
+    auto init_yaml(YAML::Node cfg) -> error_c override {
         _cnt = std::make_shared<StatCounters>("udpcli");
         _cnt->tags.push_front({"endpoint",name});
         auto statcfg = cfg["stat"];

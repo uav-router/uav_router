@@ -21,6 +21,7 @@ def configure(conf):
 def build(bld):
     sources = bld.path.find_node('src').ant_glob('*.cpp')
     tests = bld.path.find_node('tests').ant_glob('*.cpp')
+    app = bld.path.find_node('app').ant_glob('*.cpp')
     yamllib = bld.path.find_node('dependencies').find_node('yaml-cpp').find_node('build')
     bld.objects(
         source   = sources,
@@ -37,6 +38,13 @@ def build(bld):
             defines      = ['YAML_CONFIG'],
             lib          = ['anl','udev','avahi-common','avahi-client','avahi-core','yaml-cpp'],
             libpath      = [yamllib.abspath()]
-            
         )
-    
+    bld.program(
+        source       = app,
+        use          = 'common_objs',
+        target       = 'uav-router',
+        includes     = ['src','dependencies/yaml-cpp/include'],
+        defines      = ['YAML_CONFIG'],
+        lib          = ['anl','udev','avahi-common','avahi-client','avahi-core','yaml-cpp'],
+        libpath      = [yamllib.abspath()]
+    )

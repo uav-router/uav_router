@@ -27,6 +27,12 @@ class RTCM_v3 : public FilterBase {
 public:
     enum {PREAMBLE=0xD3};
     RTCM_v3():FilterBase("RTCM_v3") {}
+#ifdef  YAML_CONFIG
+    auto init_yaml(YAML::Node cfg) -> error_c override {
+        return error_c();
+    }
+#endif  //YAML_CONFIG
+
     auto write(const void* buf, int len) -> int override {
         auto* ptr = (uint8_t*)buf;
         auto ret = len;
