@@ -139,4 +139,25 @@ stats:
   queue:
     max: 10000
     shrink: 9900
-          
+logging:
+  disable:
+    - router
+    - avahi
+    - filters
+    - ioloop
+    - addrinfo
+    - signal
+    - tcpclient
+    - tcpstream
+    - tcpserver
+    - timer
+    - uart
+    - udpserver
+    - udpclient
+    - svclistener
+    - all
+  error:
+  warning:
+  notice:
+  info:
+  debug:

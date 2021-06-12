@@ -1,6 +1,8 @@
 #ifndef __STAT_INC_H__
 #define __STAT_INC_H__
+#include "../err.h"
 #include "metric.h"
+#include "endpoints.h"
 #include <memory>
 #include <forward_list>
 
@@ -33,6 +35,9 @@ class StatHandler {
 public:
     virtual auto stat() -> std::shared_ptr<OStatEndpoint> = 0;
     virtual void set_output(std::shared_ptr<Writeable> out) = 0;
+#ifdef YAML_CONFIG
+    virtual auto init_yaml(std::shared_ptr<Writeable> out, YAML::Node cfg) -> error_c = 0;
+#endif //YAML_CONFIG
     virtual void clear_outputs() = 0;
     virtual void register_report(std::shared_ptr<Stat> source, std::chrono::nanoseconds period) = 0;
 };

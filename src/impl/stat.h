@@ -71,6 +71,46 @@ public:
         }
         output->init(out);
     }
+#ifdef YAML_CONFIG
+    auto init_yaml(std::shared_ptr<Writeable> out, YAML::Node cfg) -> error_c override {
+        set_output(out);
+        if (cfg && cfg.IsMap()) {
+            auto packsize = cfg["packsize"];
+            if (packsize && packsize.IsScalar()) {
+                output->pack_size(packsize.as<int>());
+            }
+            auto queue = cfg["queue"];
+            if (queue && queue.IsMap()) {
+                int max = 10000;
+                int shrink = 9900;
+                auto entry = queue["max"];
+                if (entry && entry.IsScalar()) {
+                    max = entry.as<int>();
+                }
+                entry = queue["shrink"];
+                if (entry && entry.IsScalar()) {
+                    shrink = entry.as<int>();
+                }
+                if (max && shrink) {
+                    output->queue_size(max, shrink);
+                }
+                entry = queue["tags"];
+                if (entry && entry.IsMap()) {
+                    std::stringstream tags;
+                    for (auto tag : entry) {
+                        if (tag.second.IsScalar()) {
+                            tags<<","<<tag.first.as<std::string>()<<"="<<tag.second.as<std::string>();
+                        }
+                    }
+                    auto t = tags.str();
+                    if (t.size()) { output->global_tags(t);
+                    }
+                }
+            }
+        }
+    }
+#endif //YAML_CONFIG
+
     void clear_outputs() override {
         output.reset();
     }

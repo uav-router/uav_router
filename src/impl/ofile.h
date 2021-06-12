@@ -8,11 +8,20 @@
 class OFileStreamImpl : public OFileStream {
 public:
     ~OFileStreamImpl() override {
-        if (f) { fclose(f);
+        if (f) { 
+            if (f==stdout) return;
+            if (f==stderr) return;
+            fclose(f);
         }
     }
     auto open(const std::string& filename) -> error_c override {
-        f = fopen(filename.c_str(),"a");
+        if (filename=="stdout") {
+            f = stdout;
+        } else if (filename=="stderr") {
+            f = stderr;
+        } else {
+            f = fopen(filename.c_str(),"a");
+        }
         if (!f) return errno_c("fopen stream");
         return error_c();
     }

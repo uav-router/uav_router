@@ -7,6 +7,7 @@
 #include <string>
 #include <regex>
 #include <tuple>
+#include <utility>
 
 Log::Log rlog {"router"};
 
@@ -38,6 +39,8 @@ public:
             }
         }
         return len;
+    }
+    bool empty() { return endpoints.empty();
     }
 private:
     std::map<Writeable*,std::weak_ptr<Writeable>> endpoints;
@@ -272,60 +275,23 @@ void setup_endpoint(const std::string& name, std::shared_ptr<StreamSource> endpo
 bool load_endpoints(std::unique_ptr<IOLoop>& loop, YAML::Node cfg) {
     if (!cfg) return false;
     if (!cfg.IsMap()) return false;
+    enum EndpointType { UART, TCPSVR, TCPCLI, UDPSVR};
+    std::vector<std::pair<EndpointType,YAML::Node>> data;
+    if (!cfg) return false;
+    if (!cfg.IsMap()) return false;
     auto uart = cfg["uart"];
     if (uart.IsMap()) {
-        for(auto port : uart) {
-            auto name = port.first.as<std::string>();
-            try {
-                auto endpoint = loop->uart(name);
-                if (endpoint) {
-                    error_c ret = endpoint->init_yaml(port.second);
-                    if (ret) { rlog.error()<<"Init UART endpoint "<<name<<" error "<<ret<<std::endl;
-                    } else {   setup_endpoint(name,std::move(endpoint));
-                    }
-                }
-            } catch(std::exception &e) {
-                rlog.error()<<"Exception while construct uart "<<name<<" "<<e.what()<<std::endl;
-            }
-        }
+        data.push_back(std::make_pair(EndpointType::UART, uart));
     }
     auto tcp = cfg["tcp"];
     if (tcp.IsMap()) {
         auto clients = tcp["clients"];
         if (clients.IsMap()) {
-            // create tcp clients
-            for(auto client : clients) {
-                auto name = client.first.as<std::string>();
-                try {
-                    auto endpoint = loop->tcp_client(name);
-                    if (endpoint) {
-                        error_c ret = endpoint->init_yaml(client.second);
-                        if (ret) { rlog.error()<<"Init tcp client endpoint "<<name<<" error "<<ret<<std::endl;
-                        } else { setup_endpoint(name,std::move(endpoint));
-                        }
-                    }
-                } catch(std::exception &e) {
-                    rlog.error()<<"Exception while construct tcp client "<<name<<" "<<e.what()<<std::endl;
-                }
-            }
+            data.push_back(std::make_pair(EndpointType::TCPCLI, clients));
         }
         auto servers = tcp["servers"];
         if (servers.IsMap()) {
-            // create tcp servers
-            for(auto server : servers) {
-                auto name = server.first.as<std::string>();
-                try {
-                    auto endpoint = loop->tcp_server(name);
-                    if (endpoint) {
-                        error_c ret = endpoint->init_yaml(server.second);
-                        if (ret) { rlog.error()<<"Init tcp server endpoint "<<name<<" error "<<ret<<std::endl;
-                        } else { setup_endpoint(name,std::move(endpoint));
-                        }
-                    }
-                } catch(std::exception &e) {
-                    rlog.error()<<"Exception while construct tcp server "<<name<<" "<<e.what()<<std::endl;
-                }
-            }
+            data.push_back(std::make_pair(EndpointType::TCPSVR, servers));
         }
     }
     auto udp = cfg["udp"];
@@ -353,22 +319,28 @@ bool load_endpoints(std::unique_ptr<IOLoop>& loop, YAML::Node cfg) {
         }
         auto servers = udp["servers"];
         if (servers.IsMap()) {
-            // create udp servers
-            for(auto server : servers) {
-                for(auto server : servers) {
-                    auto name = server.first.as<std::string>();
-                    try {
-                    auto endpoint = loop->udp_server(name);
-                    if (endpoint) {
-                        error_c ret = endpoint->init_yaml(server.second);
-                        if (ret) { rlog.error()<<"Init udp server endpoint "<<name<<" error "<<ret<<std::endl;
-                        } else { setup_endpoint(name,std::move(endpoint));
-                        }
-                    }
-                    } catch(std::exception &e) {
-                        rlog.error()<<"Exception while construct udp server "<<name<<" "<<e.what()<<std::endl;
+            data.push_back(std::make_pair(EndpointType::UDPSVR, servers));
+        }
+    }
+    for (auto& item : data) {
+        for(auto endp : item.second) {
+            auto name = endp.first.as<std::string>();
+            try {
+                std::unique_ptr<StreamSource> endpoint;
+                switch(item.first) {
+                case UART: endpoint = loop->uart(name); break;
+                case TCPSVR: endpoint = loop->tcp_server(name); break;
+                case TCPCLI: endpoint = loop->tcp_client(name); break;
+                case UDPSVR: endpoint = loop->udp_server(name); break;
+                }
+                if (endpoint) {
+                    error_c ret = endpoint->init_yaml(endp.second);
+                    if (ret) { rlog.error()<<"Init endpoint "<<name<<" error "<<ret<<std::endl;
+                    } else {   setup_endpoint(name,std::move(endpoint));
                     }
                 }
+            } catch(std::exception &e) {
+                rlog.error()<<"Exception while construct uart "<<name<<" "<<e.what()<<std::endl;
             }
         }
     }
@@ -400,7 +372,33 @@ void cleanup() {
     file_entries.clear();
 }
 
+void load_loggers(YAML::Node cfg) {
+    std::vector<std::pair<std::string, Log::Level>> levels = {
+        {"disable", Log::Level::DISABLE},
+        {"error", Log::Level::ERROR},
+        {"warning", Log::Level::WARNING},
+        {"notice", Log::Level::NOTICE},
+        {"info", Log::Level::INFO},
+        {"debug", Log::Level::DEBUG}
+    };
+    if (cfg && cfg.IsMap()) {
+        for(auto& item : levels) {
+            auto chapter = cfg[item.first];
+            if (!chapter) continue;
+            if (chapter.IsScalar()) {
+                Log::set_level(item.second, {chapter.as<std::string>()});
+            } else if (chapter.IsSequence()) {
+                for(auto entry : chapter) {
+                    Log::set_level(item.second, {entry.as<std::string>()});
+                }
+            }
+        }
+    }
+}
+
 int main(int argc, char *argv[]) {
+    Log::init();
+    Log::set_level(Log::Level::DEBUG,{"router"});
     auto loop = IOLoop::loop();
     error_c ec = loop->handle_CtrlC();
     if (ec) {
@@ -413,9 +411,27 @@ int main(int argc, char *argv[]) {
     }
     std::cout<<"Load config file "<<config_file_name<<std::endl;
     YAML::Node config = YAML::LoadFile(config_file_name);
+    load_loggers(config["logging"]);
     if (!load_routes(config["routes"])) return 1;
-    if (!load_endpoints(loop, config["endpoints"])) return 1;
-    auto stats = config["stats"];
+    loop->zeroconf_ready([&loop,endpoints = config["endpoints"]](){
+        if (!load_endpoints(loop, endpoints)) {
+            std::cout<<"Error creating endpoints. Stop."<<std::endl;
+            loop->stop();
+        }    
+    });
+    auto stat_cfg = config["stats"];
+    if (stat_cfg && stat_cfg.IsMap()) {
+        auto endpoint = stat_cfg["endpoint"];
+        if (endpoint && endpoint.IsScalar()) {
+            auto output = std::make_shared<Destination>();
+            endpoint_store.connect_to_dest(endpoint.as<std::string>(),output);
+            if (!output->empty()) {
+                auto stats = loop->stats();
+                stats->init_yaml(output, stat_cfg);
+            }
+        }
+    }
+    loop->run();
     cleanup();
     return 0;
 }

@@ -201,7 +201,10 @@ public:
     }
     
     void zeroconf_ready(OnEvent func) override {
-        _block_zeroconf = false;
+        if (_block_zeroconf) {
+            func();
+            return;
+        }
         if (!_zeroconf) {
             _zeroconf = std::make_unique<AvahiImpl>(this);
         }

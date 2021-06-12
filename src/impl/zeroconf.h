@@ -61,7 +61,10 @@ public:
                 p->lock()->svc_resolved(service.name,name,service.interface,addr);
                 it = p;
             }
-            evt->add(ServiceEvent::ADD).add_tag("svc_name", service.name).add_tag(name, name).add_tag("type", service.type);
+            auto& event = evt->add(ServiceEvent::ADD);
+            event.add_tag("svc_name", service.name);
+            event.add_tag(name, name);
+            event.add_tag("type", service.type);
         });
         _sb->on_complete([this](){
             complete = true;
