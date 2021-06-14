@@ -231,12 +231,14 @@ struct SourceEntry {
     std::shared_ptr<StreamSource> connection;
     std::shared_ptr<Destination> destination;
     std::vector<std::shared_ptr<Filter>> filters;
+    SourceEntry() : destination(std::make_shared<Destination>()) {}
 };
 
 struct ClientEntry {
     std::shared_ptr<Client> client;
     std::shared_ptr<Destination> destination;
     std::vector<std::shared_ptr<Filter>> filters;
+    ClientEntry() : destination(std::make_shared<Destination>()) {}
 };
 
 std::map<std::string, SourceEntry> source_entries;

@@ -61,7 +61,10 @@ public:
             }
         }
         if (link.empty()) return;
-        evt->add(0).add_tag("action", action).add_tag("node", node).add_tag("link", link);
+        auto& event = evt->add(0);
+        event.add_tag("action", action);
+        event.add_tag("node", node);
+        event.add_tag("link", link);
         auto it = udev_watches.before_begin();
         for(auto p = udev_watches.begin();p!=udev_watches.end();p=std::next(it)) {
             if (p->expired()) {

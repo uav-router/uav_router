@@ -2,6 +2,7 @@
 #include "filters/nmea.h"
 #include "filters/rtcm3.h"
 #include "filters/ubx.h"
+#include "filters/hex.h"
 #include "log.h"
 #include <memory>
 
@@ -12,6 +13,7 @@ namespace Filters {
         if (name=="nmea") return std::make_shared<NMEA>();
         if (name=="rtcm3") return std::make_shared<RTCM_v3>();
         if (name=="ubx") return std::make_shared<UBX>();
+        if (name=="hex") return std::make_shared<Hex>();
         return std::shared_ptr<Filter>();
     }
 #ifdef  YAML_CONFIG

@@ -108,6 +108,7 @@ public:
                 }
             }
         }
+        return error_c();
     }
 #endif //YAML_CONFIG
 

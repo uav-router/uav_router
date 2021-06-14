@@ -1,0 +1,17 @@
+endpoints:
+  uart:
+    UartEndpoint:
+      path: /dev/ttyUSB0
+  file:
+    console:
+      name: stdout
+routes:
+  uart_to_console:
+    src: UartEndpoint
+    dst:
+      type: hex
+      dst: console
+logging:
+  debug:
+    - ioloop
+    - uart

@@ -81,7 +81,9 @@ public:
                 p->lock()->svc_removed(service.name);
                 it = p;
             }
-            evt->add(ServiceEvent::REMOVE).add_tag("svc_name", service.name).add_tag("type", service.type);
+            auto& event = evt->add(ServiceEvent::REMOVE);
+            event.add_tag("svc_name", service.name);
+            event.add_tag("type", service.type);
             if (_check_ports) {
                 std::regex rex("^([\\d]+)-(.*?)-claim$");
                 std::smatch result;

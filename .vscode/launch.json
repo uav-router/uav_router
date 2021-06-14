@@ -34,7 +34,7 @@
             "request": "launch",
             "program": "${workspaceFolder}/build/uav-router",
             "args": [
-                "${workspaceFolder}/others/config.yml"
+                "${workspaceFolder}/tests/conf/uart.yml"
             ],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
