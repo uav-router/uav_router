@@ -128,10 +128,10 @@ bool construct_route(YAML::Node cfg, std::shared_ptr<Destination>& dest, std::ve
         construct_route(dst,next,filters);
     }
     auto rest = cfg["rest"];
-    if (dst) {
+    if (rest) {
         auto rst = std::make_shared<Destination>();
         filter->rest(rst);
-        construct_route(dst,rst,filters);
+        construct_route(rest,rst,filters);
     }
     dest->add(filter);
     return true;
