@@ -65,7 +65,7 @@ public:
                     len-=copy_len;
                     if (packet_len==3) {
                         state = LOAD;
-                        payload_len = (packet[1]<<8 | packet[2]) & 0x3ff;
+                        payload_len = (int(packet[1])<<8 | packet[2]) & 0x3ff;
                     }
                 } break;
                 case LOAD: {
@@ -81,8 +81,8 @@ public:
                             write_next(packet.data(),packet_len);
                         } else {
                             cnt->add("badcrc",1);
-                            write_rest(packet.data(),2);
-                            write(packet.data()+2,packet_len-2);
+                            write_rest(packet.data(),1);
+                            write(packet.data()+1,packet_len-1);
                         }
                     }
                 } break;

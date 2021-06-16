@@ -108,9 +108,10 @@ public:
                         if (valid_checksum()) {
                             write_next(packet.data(),packet_len);
                             break;
-                        } else { cnt->add("badcrc",1);
                         }
+                        cnt->add("badcrc",1);
                         write_rest(packet.data(),1);
+                        write(packet.data()+1,packet_len-1);
                     }
                 } break;
             }
@@ -121,7 +122,7 @@ public:
         auto crc = crc_calculate(packet.data()+1, packet[1]+5);
         if (_crc_extra) { crc_accumulate(_crc_extra[packet[5]], &crc);
         }
-        return (packet[packet_len-2]+(packet[packet_len-1]>>8))==crc;
+        return (packet[packet_len-2]+(packet[packet_len-1]<<8))==crc;
     }
 private:
     std::array<uint8_t,263> packet;

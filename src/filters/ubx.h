@@ -60,7 +60,7 @@ public:
                     len-=copy_len;
                     if (packet_len==6) {
                         state = LOAD;
-                        payload_len = packet[4] + (packet[5]>>8);
+                        payload_len = packet[4] + (packet[5]<<8);
                     }
                 } break;
                 case LOAD: {
@@ -72,7 +72,7 @@ public:
                     len-=copy_len;
                     if (packet_len==size) {
                         state = BEFORE;
-                        if (valid_checksum()) { 
+                        if (valid_checksum()) {
                             write_next(packet.data(),packet_len);
                         } else {
                             cnt->add("badcrc",1);
