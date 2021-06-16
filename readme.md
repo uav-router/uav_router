@@ -40,7 +40,7 @@ This project is not implemented already.
 ### Router
 - [x] Router tables (__basic tested__)
 - [x] Endpoint creation (__basic tested__)
-- [ ] Expand environment variables in config file with defaults
+- [x] Expand environment variables in config file with defaults
 - [ ] Reload config file and reconfigure system when config file changed
 ### Plugins
 - [ ] Filter plugins

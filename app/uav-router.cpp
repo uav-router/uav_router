@@ -2,12 +2,17 @@
 #include <ioloop.h>
 #include <filters.h>
 #include <log.h>
+#include <err.h>
 #include <memory>
 #include <set>
 #include <string>
 #include <regex>
 #include <tuple>
 #include <utility>
+#include <unistd.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+
 
 Log::Log rlog {"router"};
 
@@ -398,26 +403,60 @@ void load_loggers(YAML::Node cfg) {
     }
 }
 
+std::string read_file(const std::string& name) {
+    struct stat sb{};
+    std::string res;
+    int fd = open(name.c_str(), O_RDONLY);
+    if (fd < 0) {
+        errno_c err;
+        std::cerr<<"Error opening "<<name<<". "<<err<<std::endl;
+        return std::string();
+    }
+    fstat(fd, &sb);
+    res.resize(sb.st_size);
+    read(fd, (char*)(res.data()), sb.st_size);
+    close(fd);
+    return std::move(res);
+}
+
+std::string get_var(const std::string& name, const std::string& def) {
+    auto ret = getenv(name.c_str());
+    if (ret) return ret;
+    return def;
+}
+
+std::string expand_shell_variables(std::string data) {
+    if (data.empty()) return data;
+    static const std::regex ENV{"\\$\\{([^}\\:]+)(\\:\\-([^}]+))?\\}"};
+    std::smatch match;
+    while (std::regex_search(data, match, ENV)) { 
+        data.replace(match.begin()->first, match[0].second, get_var(match[1].str(),match[3].str()));
+    }
+    return std::move(data);
+}
+
 int main(int argc, char *argv[]) {
     Log::init();
     Log::set_level(Log::Level::DEBUG,{"router"});
     auto loop = IOLoop::loop();
     error_c ec = loop->handle_CtrlC();
     if (ec) {
-        std::cout<<"Ctrl-C handler error "<<ec<<std::endl;
+        std::cerr<<"Ctrl-C handler error "<<ec<<std::endl;
         return 1;
     }
     std::string config_file_name = "config.yaml";
     if (argc>1) {
         config_file_name = argv[1];
     }
-    std::cout<<"Load config file "<<config_file_name<<std::endl;
-    YAML::Node config = YAML::LoadFile(config_file_name);
+    std::cerr<<"Load config file "<<config_file_name<<std::endl;
+    std::string expanded = std::move(expand_shell_variables(read_file(config_file_name)));
+    if (expanded.empty()) return 1;
+    YAML::Node config = YAML::Load(expanded);
     load_loggers(config["logging"]);
-    if (!load_routes(config["routes"])) return 1;
+    if (!load_routes(config["routes"])) return 2;
     loop->zeroconf_ready([&loop,endpoints = config["endpoints"]](){
         if (!load_endpoints(loop, endpoints)) {
-            std::cout<<"Error creating endpoints. Stop."<<std::endl;
+            std::cerr<<"Error creating endpoints. Stop."<<std::endl;
             loop->stop();
         }    
     });
