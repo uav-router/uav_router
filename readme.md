@@ -12,14 +12,18 @@ This project is not implemented already.
 - [x] Zeroconf name resolution in both direction (__basic tested__) : 
     - clients connect to servers by its names
     - servers resolve clients names after connection
+- [x] File output enpoint (__basic tested__)
+    - file or stdout/stderr output
+    - use color for output
 ### Filters & Protocols
-- [x] Mavlink v1 protocol recognizer (__implemented__)
+- [x] Mavlink v1 protocol recognizer (__basic tested__)
 - [x] Mavlink v1 SysID-CompID filter (__implemented__)
 - [x] Mavlink v1 MsgID filter (__implemented__)
 - [x] Mavlink v1 MsgID frequency reducer (__implemented__)
-- [x] UBX protocol recognizer (__implemented__)
+- [x] UBX protocol recognizer (__basic tested__)
 - [x] NMEA protocol recognizer (__implemented__)
-- [x] RTCM3 protocol recognizer (__implemented__)
+- [x] RTCM3 protocol recognizer (__basic tested__)
+- [x] Decode binary stream to ASCII hexadecimal format  (__basic tested__)
 ### Monitoring
 - [x] Collect endpoints read/write bytes (__basic tested__)
 - [x] Collect endpoints read/write bytes (__basic tested__)
@@ -34,8 +38,10 @@ This project is not implemented already.
 - [x] Implement monitoring with InfluxDB UDP protocol  (__implemented__)
 - [x] Write monitoring data to file using InfluxDB line protocol (__basic tested__)
 ### Router
-- [ ] Router tables
-- [ ] Endpoint creation
+- [x] Router tables (__basic tested__)
+- [x] Endpoint creation (__basic tested__)
+- [ ] Expand environment variables in config file with defaults
+- [ ] Reload config file and reconfigure system when config file changed
 ### Plugins
 - [ ] Filter plugins
 - [ ] General plugins
