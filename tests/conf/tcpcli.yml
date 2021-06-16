@@ -1,0 +1,32 @@
+endpoints:
+  tcp:
+    clients:
+      TcpClient:
+        address: test
+        port: 5760
+  file:
+    console:
+      name: stdout
+    errors:
+      name: stdout
+      color: red
+routes:
+  to_console:
+    src: TcpClient
+    dst:
+      type: mavlink1
+      dst:
+        type: hex
+        dst: console
+      rest:
+        type: hex
+        dst: errors
+#routes:
+#  to_console:
+#    src: TcpClient
+#    dst: console
+
+logging:
+  debug:
+    - ioloop
+    - tcpclient
