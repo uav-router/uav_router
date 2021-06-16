@@ -64,9 +64,9 @@ public:
                 }
             } else {
                 if (n != sz) {
-                    log.warning()<<"Datagram declared size "<<sz<<" is differ than read "<<n<<std::endl;
+                    log.warning()<<"Datagram declared size "<<sz<<" is differ than read "<<n<<Log::endl;
                 }
-                log.debug()<<"on_read"<<std::endl;
+                log.debug()<<"on_read"<<Log::endl;
                 on_read(buffer, n);
                 _cnt->add("read",n);
                 if (!_exists) return STOP;
@@ -189,7 +189,7 @@ public:
                         SockAddrList addrlist = std::move(a);
                         if (addrlist.empty() || std::next(addrlist.begin())==addrlist.end()) {
                             _addr = SockAddr::any(family,port);
-                            log.warning()<<"Multiple addresses found for "<<_address<<" name. Use ANY address of "<<family<<" family"<<std::endl;
+                            log.warning()<<"Multiple addresses found for "<<_address<<" name. Use ANY address of "<<family<<" family"<<Log::endl;
                         } else {
                             _addr = *addrlist.begin();
                         }
@@ -229,12 +229,12 @@ public:
         _group->on_create([this](AvahiGroup* g){ create_service(g); 
         });
         _group->on_collision([this](AvahiGroup* g){ 
-            log.info()<<"Group collision"<<std::endl;
+            log.info()<<"Group collision"<<Log::endl;
             g->reset();
             check_collision(g);
         });
         _group->on_established([this](AvahiGroup* g){ 
-            log.info()<<"Service "<<name<<" registered"<<std::endl;
+            log.info()<<"Service "<<name<<" registered"<<Log::endl;
             error_c ec = listen_socket();
             if (on_error(ec,"listen")) { 
                 if (!_exists) return;
@@ -324,13 +324,13 @@ public:
         _itf_name = interface;
         if (itf_addr.interface(interface, 0, family)) {
             _addr = _addr = SockAddr::any(family,0);
-            log.warning()<<"No address found for "<<interface<<" interface. Use ANY address of "<<family<<" family"<<std::endl;
+            log.warning()<<"No address found for "<<interface<<" interface. Use ANY address of "<<family<<" family"<<Log::endl;
         } else {
             if (std::next(itf_addr.begin())==itf_addr.end()) {
                 _addr = *itf_addr.begin();
             } else {
                 _addr = _addr = SockAddr::any(family,0);
-                log.warning()<<"Multiple addresses found for "<<interface<<" interface. Use ANY address of "<<family<<" family"<<std::endl;
+                log.warning()<<"Multiple addresses found for "<<interface<<" interface. Use ANY address of "<<family<<" family"<<Log::endl;
             }
         }
         return *this;

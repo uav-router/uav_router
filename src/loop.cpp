@@ -38,11 +38,11 @@
 class IOLoopImpl : public IOLoopSvc, public Poll {
 public:
     IOLoopImpl(int size): _epoll_events_number(size) {
-        on_error([](error_c& ec){ log.error()<<"ioloop"<<ec<<std::endl;} );
+        on_error([](error_c& ec){ log.error()<<"ioloop"<<ec<<Log::endl;} );
         errno_c ret = _epoll.create();
         if (ret) {
             ret.add_context("IOLoop");
-            log.error()<<ret<<std::endl;
+            log.error()<<ret<<Log::endl;
             throw std::system_error(ret, ret.context());
         }
     }
@@ -67,7 +67,7 @@ public:
     //auto stats() -> StatHandler& override {}
     // run
     void run() override { 
-        log.debug()<<"run start"<<std::endl;
+        log.debug()<<"run start"<<Log::endl;
         _stat = std::make_shared<StatDurations>("loop");
         if (!_stats) {
             _stats = std::make_unique<StatHandlerImpl>(this);
@@ -87,48 +87,48 @@ public:
             for (int i = 0; i < r; i++) {
                 auto* obj = static_cast<IOPollable *>(events[i].data.ptr);
                 auto evs = events[i].events;
-                //log.debug()<<obj->name<<" event "<<evs<<" obj "<<obj<<std::endl;
+                //log.debug()<<obj->name<<" event "<<evs<<" obj "<<obj<<Log::endl;
                 if (obj->epollEvent(evs)) continue;
                 if (evs & EPOLLIN) {
-                    //log.debug()<<"EPOLLIN"<<std::endl;
+                    //log.debug()<<"EPOLLIN"<<Log::endl;
                     int ret = obj->epollIN();
                     auto s = _stat->time["in"].measure();
-                    if (ret==IOPollable::NOT_HANDLED) log.warning()<<obj->name<<" EPOLLIN not handled"<<std::endl;
+                    if (ret==IOPollable::NOT_HANDLED) log.warning()<<obj->name<<" EPOLLIN not handled"<<Log::endl;
                     if (ret==IOPollable::STOP) continue;
                 }
                 if (evs & EPOLLOUT) {
-                    //log.debug()<<"EPOLLOUT"<<std::endl;
+                    //log.debug()<<"EPOLLOUT"<<Log::endl;
                     auto s = _stat->time["out"].measure();
                     int ret = obj->epollOUT();
-                    if (ret==IOPollable::NOT_HANDLED) log.warning()<<obj->name<<" EPOLLOUT not handled"<<std::endl;
+                    if (ret==IOPollable::NOT_HANDLED) log.warning()<<obj->name<<" EPOLLOUT not handled"<<Log::endl;
                     if (ret==IOPollable::STOP) continue;
                 }
                 if (evs & EPOLLPRI) {
-                    //log.debug()<<"EPOLLPRI"<<std::endl;
+                    //log.debug()<<"EPOLLPRI"<<Log::endl;
                     auto s = _stat->time["pri"].measure();
                     int ret = obj->epollPRI();
-                    if (ret==IOPollable::NOT_HANDLED) log.warning()<<obj->name<<" EPOLLPRI not handled"<<std::endl;
+                    if (ret==IOPollable::NOT_HANDLED) log.warning()<<obj->name<<" EPOLLPRI not handled"<<Log::endl;
                     if (ret==IOPollable::STOP) continue;
                 }
                 if (evs & EPOLLERR) {
-                    //log.debug()<<"EPOLLERR"<<std::endl;
+                    //log.debug()<<"EPOLLERR"<<Log::endl;
                     auto s = _stat->time["err"].measure();
                     int ret = obj->epollERR();
-                    if (ret==IOPollable::NOT_HANDLED) log.warning()<<obj->name<<" EPOLLERR not handled"<<std::endl;
+                    if (ret==IOPollable::NOT_HANDLED) log.warning()<<obj->name<<" EPOLLERR not handled"<<Log::endl;
                     if (ret==IOPollable::STOP) continue;
                 }
                 if (evs & EPOLLHUP) {
-                    //log.debug()<<"EPOLLHUP"<<std::endl;
+                    //log.debug()<<"EPOLLHUP"<<Log::endl;
                     auto s = _stat->time["hup"].measure();
                     int ret = obj->epollHUP();
-                    if (ret==IOPollable::NOT_HANDLED) log.warning()<<obj->name<<" EPOLLHUP not handled"<<std::endl;
+                    if (ret==IOPollable::NOT_HANDLED) log.warning()<<obj->name<<" EPOLLHUP not handled"<<Log::endl;
                     if (ret==IOPollable::STOP) continue;
                 }
                 if (evs & EPOLLRDHUP) {
-                    //log.debug()<<"EPOLLRDHUP"<<std::endl;
+                    //log.debug()<<"EPOLLRDHUP"<<Log::endl;
                     auto s = _stat->time["rdhup"].measure();
                     int ret = obj->epollRDHUP();
-                    if (ret==IOPollable::NOT_HANDLED) log.warning()<<obj->name<<" EPOLLRDHUP not handled"<<std::endl;
+                    if (ret==IOPollable::NOT_HANDLED) log.warning()<<obj->name<<" EPOLLRDHUP not handled"<<Log::endl;
                     if (ret==IOPollable::STOP) continue;
                 }
             }
@@ -136,7 +136,7 @@ public:
         for (auto w : _iowatches) { w->cleanup();
         }
         _iowatches.clear();
-        log.debug()<<"run end"<<std::endl;
+        log.debug()<<"run end"<<Log::endl;
     }
     void stop() override {_loop_stop = true;}
     
@@ -173,7 +173,7 @@ public:
     auto handle_CtrlC() -> error_c override {
         ctrlC_handler = signal_handler();
         return ctrlC_handler->init({SIGINT,SIGTERM}, [this](signalfd_siginfo* si) {
-            log.info()<<"Signal: "<<strsignal(si->ssi_signo)<<std::endl;
+            log.info()<<"Signal: "<<strsignal(si->ssi_signo)<<Log::endl;
             stop();
             ctrlC_handler.reset();
             return true;

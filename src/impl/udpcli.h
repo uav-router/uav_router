@@ -112,7 +112,7 @@ public:
     }
 
     void from_service_descr() {
-        log.debug()<<"from_service_descr "<<_service_name<<std::endl;
+        log.debug()<<"from_service_descr "<<_service_name<<Log::endl;
         std::vector<std::pair<std::string,std::string>> txt;
         SockAddrList addresses;
         auto zeroconf = _loop->zeroconf();
@@ -144,7 +144,7 @@ public:
     }
 
     void svc_resolved(std::string name, std::string endpoint, int itf, const SockAddr& addr) override {
-        log.debug()<<"svc_resolved"<<std::endl;
+        log.debug()<<"svc_resolved"<<Log::endl;
         if (_fd!=-1) return;
         if (name==_service_name || endpoint==_service_name) {
             if (_itf.second && _itf.second!=itf) return;
@@ -181,10 +181,10 @@ public:
                 SockAddrList list;
                 list.broadcast(itf.first, port);
                 if (list.empty()) {
-                    log.warning()<<"No address found for interface "<<itf.first<<". Use global broadcast address"<<std::endl;
+                    log.warning()<<"No address found for interface "<<itf.first<<". Use global broadcast address"<<Log::endl;
                     _addr.init("<broadcast>",port);
                 } else if (std::next(list.begin())!=list.end()) {
-                    log.warning()<<"Multiple address found for interface "<<itf.first<<". Use global broadcast address"<<std::endl;
+                    log.warning()<<"Multiple address found for interface "<<itf.first<<". Use global broadcast address"<<Log::endl;
                     _addr.init("<broadcast>",port);
                 } else {
                     _addr = *list.begin();
@@ -292,13 +292,13 @@ public:
                 }
             });
             _group->on_collision([this](AvahiGroup* g){ 
-                log.error()<<"Collision on endpoint name "<<name<<std::endl;
+                log.error()<<"Collision on endpoint name "<<name<<Log::endl;
                 g->reset();
                 auto ec = _loop->poll()->add(_fd, EPOLLIN | EPOLLOUT | EPOLLET, this);
                 on_error(ec,"poll add collision");
             });
             _group->on_established([this](AvahiGroup* g){ 
-                log.info()<<"Service "<<name<<" registered"<<std::endl;
+                log.info()<<"Service "<<name<<" registered"<<Log::endl;
                 _timer->shoot([this](){ 
                     auto ec = _loop->poll()->add(_fd, EPOLLIN | EPOLLOUT | EPOLLET, this);
                     on_error(ec,"poll add established");
@@ -340,7 +340,7 @@ public:
                     } else break;
                 } else {
                     if (n != sz) {
-                        log.warning()<<"Datagram declared size "<<sz<<" is differ than read "<<n<<std::endl;
+                        log.warning()<<"Datagram declared size "<<sz<<" is differ than read "<<n<<Log::endl;
                     }
                     std::string name;
                     if (_loop->zeroconf()) {
@@ -382,7 +382,7 @@ public:
         } else {
             _cnt->add("write",ret);
             if (ret != len) {
-                log.error()<<"Partial send "<<ret<<" from "<<len<<" bytes"<<std::endl;
+                log.error()<<"Partial send "<<ret<<" from "<<len<<" bytes"<<Log::endl;
             }
         }
         return ret;

@@ -8,7 +8,7 @@
 namespace Log {
     class NullBuffer : public std::streambuf {
     public:
-      auto overflow(int c) -> int final { return c; }
+        auto overflow(int c) -> int final { return c; }
     };
     NullBuffer null_buffer;
     std::ostream null_stream(&null_buffer);
@@ -23,16 +23,16 @@ namespace Log {
                     std::cerr<<"\033[31m"; //RED
                     break;
                 case Level::WARNING:
-                    std::cerr<<"\033[0;33m"; //ORANGE
+                    std::cerr<<"\033[36m"; //CYAN
                     break;
                 case Level::NOTICE:
-                    std::cerr<<"033[33;1m"; //YELLOW
+                    std::cerr<<"\033[33m"; //YELLOW
                     break;
                 case Level::INFO:
-                    std::cerr<<"\033[37;1m"; //WHITE
+                    std::cerr<<"\033[97m"; //WHITE
                     break;
                 case Level::DEBUG:
-                    std::cerr<<"\033[34;1m"; //LIGHTBLUE
+                    std::cerr<<"\033[94m"; //LIGHTBLUE
             }
         }
         return std::cerr;
@@ -68,6 +68,14 @@ namespace Log {
         use_color = isatty(STDERR_FILENO);
         avahi_set_log_function(avahiLogFunction);
     }
+
+    auto endl(std::ostream& os) -> std::ostream& {
+        if (use_color) {
+            os<<"\033[0m";
+        }
+        return os.put(os.widen('\n')).flush();
+    }
+
 
     Log l("default");
 

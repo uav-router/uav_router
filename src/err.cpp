@@ -89,7 +89,7 @@ auto error_handler::on_error(error_c& ec, const std::string& context) -> bool {
     if (!context.empty()) ec.add_context(context);
     if (_on_error) { _on_error(ec);
     } else {
-        Log::error()<<ec<<std::endl;
+        Log::error()<<ec<<Log::endl;
     }
     return true;
 }
@@ -98,7 +98,7 @@ auto error_handler::on_error(error_c ec) -> bool {
     if (!ec) return false;
     if (_on_error) { _on_error(ec);
     } else {
-        Log::error()<<ec<<std::endl;
+        Log::error()<<ec<<Log::endl;
     }
     return true;
 }
@@ -110,7 +110,7 @@ auto error_handler::on_error(int ret, const std::string& context) -> bool {
     if (!context.empty()) ec.add_context(context);
     if (_on_error) { _on_error(ec);
     } else {
-        Log::error()<<ec<<std::endl;
+        Log::error()<<ec<<Log::endl;
     }
     return true;
 }

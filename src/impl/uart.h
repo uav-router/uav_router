@@ -136,7 +136,7 @@ public:
             auto stat_period = duration(statcfg["period"]);
             if (stat_period.count()) { period = stat_period;
             } else {
-                log.error()<<"Unreadable stat duration "<<statcfg["period"].as<std::string>()<<std::endl;
+                log.error()<<"Unreadable stat duration "<<statcfg["period"].as<std::string>()<<Log::endl;
             }
             auto tags = statcfg["tags"];
             if (tags && tags.IsMap()) {
@@ -170,7 +170,7 @@ public:
 
     void start_udev_watch() {
         if (!_usb_id.empty() && !_udev_pollable) {
-            log.debug()<<"USB port "<<_usb_id<<" detected"<<std::endl;
+            log.debug()<<"USB port "<<_usb_id<<" detected"<<Log::endl;
             _udev_pollable = std::make_shared<UdevPollableProxy>(this);
             _udev->start_watch(_udev_pollable);
         }
@@ -238,10 +238,10 @@ public:
             ret = to_errno_c(ioctl(_fd, TIOCSSERIAL, &serial_ctl),"set serial "+_path);
         }
         if (ret) {
-            log.warning()<<"Low latency "<<ret<<std::endl;
-            log.info()<<"Open UART "<<_path<<std::endl;
+            log.warning()<<"Low latency "<<ret<<Log::endl;
+            log.info()<<"Open UART "<<_path<<Log::endl;
         } else {
-            log.info()<<"Open UART with low latency "<<_path<<std::endl;
+            log.info()<<"Open UART with low latency "<<_path<<Log::endl;
         }
         ret = to_errno_c(ioctl(_fd, TCFLSH, TCIOFLUSH),"flush "+_path);
         if (ret) return ret;
@@ -264,7 +264,7 @@ public:
                 break;
             }
             if (n==0) {
-                log.warning()<<"UART read returns 0 bytes"<<std::endl;
+                log.warning()<<"UART read returns 0 bytes"<<Log::endl;
                 break;
             }
             cnt->add("read",n);
@@ -283,12 +283,12 @@ public:
     }
 
     auto epollERR() -> int override {
-        log.debug()<<"EPOLLERR on uart "<<_path<<std::endl;
+        log.debug()<<"EPOLLERR on uart "<<_path<<Log::endl;
         return HANDLED;
     }
 
     auto epollHUP() -> int override {
-        log.debug()<<"EPOLLHUP on uart "<<_path<<std::endl;
+        log.debug()<<"EPOLLHUP on uart "<<_path<<Log::endl;
         if (_fd != -1) {
             _poll->del(_fd, this);
         }
@@ -329,13 +329,13 @@ public:
 
     void udev_add(const std::string& node, const std::string& id) override {
         if (id==_usb_id) { 
-            log.debug()<<"Device "<<_usb_id<<" added"<<std::endl;
+            log.debug()<<"Device "<<_usb_id<<" added"<<Log::endl;
             init_uart_retry();
         }
     }
     void udev_remove(const std::string& node, const std::string& id) override {
         if (id==_usb_id) {
-            log.debug()<<"Device "<<_usb_id<<" removed"<<std::endl;
+            log.debug()<<"Device "<<_usb_id<<" removed"<<Log::endl;
             if (_fd!=-1) { 
                 _poll->del(_fd,this);
                 cleanup();

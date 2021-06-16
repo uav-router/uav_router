@@ -33,7 +33,7 @@ public:
                 return HANDLED;
             } 
             if (s != sizeof(fdsi)) {
-                log.error()<<"_sig_fd Wrong read size "<<s<<std::endl;
+                log.error()<<"_sig_fd Wrong read size "<<s<<Log::endl;
                 return HANDLED;
             }
             if (_on_signal) {
@@ -43,7 +43,7 @@ public:
         return HANDLED;
     }
     void cleanup() override {
-        log.debug()<<"cleanup signal"<<std::endl;
+        log.debug()<<"cleanup signal"<<Log::endl;
         if (_fd != -1) {
             //_poll->del(_fd, this);
             close(_fd);
@@ -52,7 +52,7 @@ public:
     }
     
     auto init(std::initializer_list<int> signals, OnSignalFunc handler) -> error_c override {
-        log.debug()<<"init signal"<<std::endl;
+        log.debug()<<"init signal"<<Log::endl;
         sigemptyset(&mask);
         for(auto signal: signals) {
             sigaddset(&mask, signal);

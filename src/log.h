@@ -38,5 +38,6 @@ namespace Log {
         Level max_level = Level::DISABLE;
         std::string _name;
     };
+    auto endl(std::ostream& os) -> std::ostream&;
 };
 #endif //__LOG_H__

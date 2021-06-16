@@ -22,7 +22,7 @@ namespace Filters {
         if (flt) {
             error_c ret = flt->init_yaml(cfg);
             if (!ret) return flt;
-            flog.error()<<"Filter "<<name<<" creation error:"<<ret<<std::endl;
+            flog.error()<<"Filter "<<name<<" creation error:"<<ret<<Log::endl;
         }
         return std::shared_ptr<Filter>();
     }

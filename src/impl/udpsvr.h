@@ -43,7 +43,7 @@ public:
         } else {
             _cnt->add("write",ret);
             /*if (ret != len) {
-            log.error()<<"Partial send "<<ret<<" from "<<len<<" bytes"<<std::endl;
+            log.error()<<"Partial send "<<ret<<" from "<<len<<" bytes"<<Log::endl;
         }*/
         }
         return ret;
@@ -99,7 +99,7 @@ public:
         _itf = itf_from_str(interface);
         _family = family;
         if (_itf.second == 0) {
-            log.warning()<<"Can't recognize value '"<<interface<<"' as interface"<<std::endl;
+            log.warning()<<"Can't recognize value '"<<interface<<"' as interface"<<Log::endl;
         }
         return *this;
     }
@@ -137,24 +137,24 @@ public:
         if (mode == UNICAST) {
             if (!_address.empty()) {
                 if (addr.init(_address,port)) {
-                    log.warning()<<"Can't recognize value '"<<_address<<"' as address"<<std::endl;
+                    log.warning()<<"Can't recognize value '"<<_address<<"' as address"<<Log::endl;
                 } else if (addr.itf().empty()) {
-                    log.warning()<<"Address "<<addr<<" is not a local interface address"<<std::endl;
+                    log.warning()<<"Address "<<addr<<" is not a local interface address"<<Log::endl;
                     //return errno_c(EADDRNOTAVAIL);
                 }
             }
             if (!addr.len() && _itf.second) {
                 if ((_family==AF_INET) || (_family==AF_INET6)) {
                     addr = SockAddr::local(_itf.first,_family,port);
-                    if (!addr.len()) { log.warning()<<"Can't get address of family "<<_family<<" for interface "<<_itf.first<<std::endl;
+                    if (!addr.len()) { log.warning()<<"Can't get address of family "<<_family<<" for interface "<<_itf.first<<Log::endl;
                     }
                 } else {
-                    log.warning()<<"Family "<<_family<<" not supported"<<std::endl;
+                    log.warning()<<"Family "<<_family<<" not supported"<<Log::endl;
                 }
             }
             if (!addr.len()) addr = SockAddr::any(_family, port);
             if (!addr.len()) {
-                log.error()<<"Can't detect address to hear"<<std::endl;
+                log.error()<<"Can't detect address to hear"<<Log::endl;
                 return errno_c(EADDRNOTAVAIL);
             }
             error_c ret = addr.bind(_fd);
@@ -165,20 +165,20 @@ public:
         } else if (mode == BROADCAST) {
             if (!_address.empty()) {
                 if (addr.init(_address,port)) {
-                    log.warning()<<"Can't recognize value '"<<_address<<"' as address"<<std::endl;
+                    log.warning()<<"Can't recognize value '"<<_address<<"' as address"<<Log::endl;
                 } else if (addr.itf(true).empty()) {
-                    log.warning()<<"Address "<<addr<<" is not a local interface broadcast address"<<std::endl;
+                    log.warning()<<"Address "<<addr<<" is not a local interface broadcast address"<<Log::endl;
                     //return errno_c(EADDRNOTAVAIL);
                 }
             }
             if (!addr.len() && _itf.second) {
                 addr = SockAddr::broadcast(_itf.first, port);
-                if (!addr.len()) { log.warning()<<"Can't get address of family "<<_family<<" for interface "<<_itf.first<<std::endl;
+                if (!addr.len()) { log.warning()<<"Can't get address of family "<<_family<<" for interface "<<_itf.first<<Log::endl;
                 }
             }
             if (!addr.len()) addr.init("<broadcast>", port);
             if (!addr.len()) {
-                log.error()<<"Can't detect address to listen"<<std::endl;
+                log.error()<<"Can't detect address to listen"<<Log::endl;
                 return errno_c(EADDRNOTAVAIL);
             }
             if (port==0) {
@@ -204,7 +204,7 @@ public:
             int yes = 1;
             error_c ret = to_errno_c(setsockopt(_fd, SOL_SOCKET, SO_REUSEPORT, &yes, sizeof(yes)),"reuse port");
             if (ret) {
-                log.warning()<<"Multicast settings: "<<ret<<std::endl;
+                log.warning()<<"Multicast settings: "<<ret<<Log::endl;
                 ret = to_errno_c(setsockopt(_fd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes)),"multicast reuseaddr");
                 if (ret) return ret;
             }
@@ -319,7 +319,7 @@ public:
             create_service(g,mode,addr); 
         });
         _group->on_collision([this,port,mode](AvahiGroup* g){ 
-            log.info()<<"Group collision"<<std::endl;
+            log.info()<<"Group collision"<<Log::endl;
             g->reset();
             error_c ret = init(port,mode);
             on_error(ret);
@@ -351,7 +351,7 @@ public:
                     } else break;
                 } else {
                     if (n != sz) {
-                        log.warning()<<"Datagram declared size "<<sz<<" is differ than read "<<n<<std::endl;
+                        log.warning()<<"Datagram declared size "<<sz<<" is differ than read "<<n<<Log::endl;
                     }
                     std::string name;
                     if (_loop->zeroconf()) {

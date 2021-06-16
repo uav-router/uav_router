@@ -73,7 +73,7 @@ public:
             close(_sfd);
             return ec;
         }
-        log.debug()<<"start_with ends"<<std::endl;
+        log.debug()<<"start_with ends"<<Log::endl;
         return error_c();
     }
     auto on_result(callback_t func) -> AddrInfo& {
@@ -95,15 +95,15 @@ public:
                 break;
             }
             if (s != sizeof(fdsi)) {
-                log.error()<<"AddrInfo->Wrong read size "<<s<<std::endl;
+                log.error()<<"AddrInfo->Wrong read size "<<s<<Log::endl;
                 continue;
             }
             if (fdsi.ssi_signo != SIGUSR1) {
-                log.error()<<"AddrInfo->Wrong signal no "<<fdsi.ssi_signo<<std::endl;
+                log.error()<<"AddrInfo->Wrong signal no "<<fdsi.ssi_signo<<Log::endl;
                 continue;
             }
             if (fdsi.ssi_code != SI_ASYNCNL) {
-                log.error()<<"AddrInfo->Wrong signal code "<<fdsi.ssi_code<<std::endl;
+                log.error()<<"AddrInfo->Wrong signal code "<<fdsi.ssi_code<<Log::endl;
                 continue;
             }
             error_c ec = eai_code(&req);
@@ -121,7 +121,7 @@ public:
             close(_sfd);
             _sfd = -1;
         }
-        log.debug()<<"Cleanup called"<<std::endl;
+        log.debug()<<"Cleanup called"<<Log::endl;
     }
 private:
     std::string _name;

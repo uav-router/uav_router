@@ -41,7 +41,7 @@ public:
             }
             if (txt.size()) { _txt[service.name] = std::move(txt);
             }
-            log.info()<<"New service "<<service.name<<" "<<addr.format(SockAddr::REG_SERVICE)<<std::endl;
+            log.info()<<"New service "<<service.name<<" "<<addr.format(SockAddr::REG_SERVICE)<<Log::endl;
             if (_check_ports) {
                 std::regex rex("^([\\d]+)-(.*?)-claim$");
                 std::smatch result;
@@ -71,7 +71,7 @@ public:
             if (_on_complete) _on_complete();
         });
         _sb->on_remove([this](CAvahiService service, AvahiLookupResultFlags flags) {
-            log.info()<<"Remove service "<<service.name<<std::endl;
+            log.info()<<"Remove service "<<service.name<<Log::endl;
             auto it = _watches.before_begin();
             for(auto p = _watches.begin();p!=_watches.end();p=std::next(it)) {
                 if (p->expired()) {

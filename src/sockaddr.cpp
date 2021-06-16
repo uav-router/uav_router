@@ -58,9 +58,9 @@ SockAddr::SockAddr() = default;
 SockAddr::~SockAddr() = default;
 SockAddr::SockAddr(struct sockaddr* addr, socklen_t len):_impl{new SockAddrImpl{addr,len}} {}
 SockAddr::SockAddr(addrinfo* ai):_impl{new SockAddrImpl{ai->ai_addr,ai->ai_addrlen}} {
-    if (ai->ai_canonname) { Log::debug()<<ai->ai_canonname<<std::endl;
+    if (ai->ai_canonname) { Log::debug()<<ai->ai_canonname<<Log::endl;
     } else {
-        Log::debug()<<"Empty canonname"<<std::endl;
+        Log::debug()<<"Empty canonname"<<Log::endl;
     }
 }
 SockAddr::SockAddr(SockAddr&& addr):_impl(std::move(addr._impl)) {}
@@ -397,7 +397,7 @@ auto SockAddrList::broadcast(const std::string& name, uint16_t port) -> error_c 
 }
 
 SockAddrList::SockAddrList(addrinfo *ai) {
-    //Log::debug()<<"ai constructor"<<std::endl;
+    //Log::debug()<<"ai constructor"<<Log::endl;
     for(;ai;ai=ai->ai_next) { add(SockAddr(ai));
     }
 }

@@ -234,12 +234,12 @@ public:
             }
         });
         _group->on_collision([this](AvahiGroup* g){ 
-            log.error()<<"Collision on endpoint name "<<name<<std::endl;
+            log.error()<<"Collision on endpoint name "<<name<<Log::endl;
             g->reset();
             connect_to_peer_retry();
         });
         _group->on_established([this](AvahiGroup* g){ 
-            log.info()<<"Service "<<name<<" registered"<<std::endl;
+            log.info()<<"Service "<<name<<" registered"<<Log::endl;
             _timer->shoot([this](){ 
                 _timer->shoot([this](){ connect(); });
                 connect_to_peer_retry();
@@ -280,7 +280,7 @@ public:
                 if (!_exists) return STOP;
             } else {
                 if (sz==0) {
-                    log.debug()<<"nothing to read"<<std::endl;
+                    //log.debug()<<"nothing to read"<<Log::endl;
                     break;
                 }
                 void* buffer = alloca(sz);
@@ -293,7 +293,7 @@ public:
                     }
                 } else {
                     if (n != sz) {
-                        log.warning()<<"Data declared size "<<sz<<" is differ than read "<<n<<std::endl;
+                        log.warning()<<"Data declared size "<<sz<<" is differ than read "<<n<<Log::endl;
                     }
                     if (auto client = cli()) client->on_read(buffer, n);
                     if (!_exists) return STOP;
