@@ -20,6 +20,7 @@ This project is not implemented already.
 - [x] Mavlink v1 SysID-CompID filter (__implemented__)
 - [x] Mavlink v1 MsgID filter (__implemented__)
 - [x] Mavlink v1 MsgID frequency reducer (__implemented__)
+- [ ] Mavlink v2 filters
 - [x] UBX protocol recognizer (__basic tested__)
 - [x] NMEA protocol recognizer (__implemented__)
 - [x] RTCM3 protocol recognizer (__basic tested__)
@@ -40,8 +41,10 @@ This project is not implemented already.
 ### Router
 - [x] Router tables (__basic tested__)
 - [x] Endpoint creation (__basic tested__)
-- [x] Expand environment variables in config file with defaults
+- [x] Expand environment variables in config file with defaults (__basic tested__)
 - [ ] Reload config file and reconfigure system when config file changed
 ### Plugins
 - [ ] Filter plugins
 - [ ] General plugins
+### Others
+- [ ] Docker build & execute container

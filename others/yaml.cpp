@@ -3,6 +3,8 @@
 #include <yaml-cpp/yaml.h>
 #include <cassert>
 #include <iostream>
+#include <vector>
+#include <map>
 
 void handle_uart(std::string name, YAML::Node cfg) {
     std::cout<<"--- Uart "<<name<<" ---"<<std::endl;
@@ -113,11 +115,11 @@ void handle_stats(YAML::Node cfg) {
     std::cout<<cfg<<std::endl;
 }
 
-int main() {
+void test_config() {
     YAML::Node config = YAML::LoadFile("others/config.yml");
     if (!config.IsMap()) {
         std::cerr<<"Config must be a map"<<std::endl;
-        return 0;
+        return;
     }
     auto endpoints = config["endpoints"];
     if (endpoints && endpoints.IsMap()) {
@@ -131,5 +133,27 @@ int main() {
     if (stats && stats.IsMap()) {
         handle_stats(stats);
     }
+}
+
+void test_vector() {
+    YAML::Node node  = YAML::Load("[1, 2, 3]");
+    auto v = node.as<std::vector<uint8_t>>();
+    std::cout<<v.size()<<std::endl;
+}
+
+void test_map() {
+    YAML::Node node  = YAML::Load("{1: 2, 2: 3, 3: 4}");
+    auto v = node.as<std::map<int,int>>();
+    for(auto& i : v) {
+        std::cout<<i.first<<", "<<i.second<<std::endl;
+    }
+    std::cout<<v.size()<<std::endl;
+}
+
+
+int main() {
+    //test_config();
+    //test_vector();
+    test_map();
     return 0;
 }

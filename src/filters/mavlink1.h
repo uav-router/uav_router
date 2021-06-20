@@ -1,6 +1,7 @@
 #ifndef __MAVLINK1__H__
 #define __MAVLINK1__H__
 #include "../inc/endpoints.h"
+#include "../log.h"
 #include <cstdint>
 #include <cstring>
 #include <memory>
@@ -62,7 +63,22 @@ public:
     Mavlink_v1(uint8_t* crc_array=crc_extra.data()):FilterBase("mavlink_v1"),_crc_extra(crc_array) {}
 #ifdef  YAML_CONFIG
     auto init_yaml(YAML::Node cfg) -> error_c override {
-        _crc_extra = crc_extra.data();
+        auto crcs = cfg["crc_extra"];
+        _crc_extra = nullptr;
+        if (crcs) {
+            if (!crcs.IsSequence()) {
+                Log::warning()<<"crc_extra is not array. Use default."<<Log::endl;
+            } else {
+                crc_holder = crcs.as<std::vector<uint8_t>>();
+                if (crc_holder.size()<256) {
+                    Log::warning()<<"crc_extra array size less than 256. Use zeroes for remaining messages."<<Log::endl;
+                    crc_holder.resize(256,0);
+                }
+                _crc_extra = crc_holder.data();
+            }
+        }
+        if (!_crc_extra) { _crc_extra = crc_extra.data();
+        }
         return error_c();
     }
 #endif  //YAML_CONFIG
@@ -126,7 +142,8 @@ public:
     }
 private:
     std::array<uint8_t,263> packet;
-    uint8_t* _crc_extra = nullptr; 
+    uint8_t* _crc_extra = nullptr;
+    std::vector<uint8_t> crc_holder;
     enum State {BEFORE,LEN, LOAD};
     State state = BEFORE;
     int packet_len = 0;
@@ -136,7 +153,77 @@ class Mavlink_v1_filter : public FilterBase {
 public:
     enum Type {SYSID, COMPID, SYSID_COMPID};
 #ifdef  YAML_CONFIG
+    void setup_filter(bool allow, YAML::Node cfg) {
+        auto chapter = cfg["msgs"];
+        if (chapter) {
+            if (chapter.IsSequence()) {
+                msg_filter(allow,chapter.as<std::vector<int>>());
+            } else if (chapter.IsScalar()) {
+                msg_filter(allow,{ chapter.as<int>() });
+            } else {
+                Log::error()<<"Mavlink msg filter values must be a sequence or scalar"<<Log::endl;
+            }
+        }
+        chapter = cfg["sysid"];
+        if (chapter) {
+            if (chapter.IsSequence()) {
+                sys_filter(allow, SYSID, chapter.as<std::vector<int>>());
+            } else if (chapter.IsScalar()) {
+                sys_filter(allow, SYSID, { chapter.as<int>() });
+            } else {
+                Log::error()<<"Mavlink msg filter values must be a sequence or scalar"<<Log::endl;
+            }
+        }
+        chapter = cfg["compid"];
+        if (chapter) {
+            if (chapter.IsSequence()) {
+                sys_filter(allow, COMPID, chapter.as<std::vector<int>>());
+            } else if (chapter.IsScalar()) {
+                sys_filter(allow, COMPID, { chapter.as<int>() });
+            } else {
+                Log::error()<<"Mavlink msg filter values must be a sequence or scalar"<<Log::endl;
+            }
+        }
+        chapter = cfg["sys_compid"];
+        if (chapter) {
+            if (chapter.IsSequence()) {
+                sys_filter(allow, SYSID_COMPID, chapter.as<std::vector<int>>());
+            } else if (chapter.IsScalar()) {
+                sys_filter(allow, SYSID_COMPID, { chapter.as<int>() });
+            } else if (chapter.IsMap()) {
+                std::vector<int> value;
+                for(auto el : chapter) {
+                    int sysid = el.first.as<int>();
+                    if (el.second) {
+                        if (el.second.IsScalar()) {
+                            value.push_back(sysid+(el.second.as<int>()<<8));
+                        } else if (el.second.IsSequence()) {
+                            for (auto compid : el.second) {
+                                value.push_back(sysid+(compid.as<int>()<<8));
+                            }
+                        }
+                    }
+                }
+                if (value.size()) { sys_filter(allow, SYSID_COMPID, value);
+                }
+            } else {
+                Log::error()<<"Mavlink msg filter values must be sequence, map or scalar"<<Log::endl;
+            }
+        }
+    }
     auto init_yaml(YAML::Node cfg) -> error_c override {
+        setup_filter(true, cfg["allow"]);
+        setup_filter(false, cfg["deny"]);
+        
+        auto chapter = cfg["freq"];
+        if (chapter) {
+            if (!chapter.IsMap()){
+                Log::error()<<"Mavlink filter 'freq' field must be a map"<<Log::endl;
+            } else {
+                freq_filter(chapter.as<std::map<int,int>>());
+            }
+        }
+
         return error_c();
     }
 #endif  //YAML_CONFIG
