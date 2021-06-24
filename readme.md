@@ -20,6 +20,7 @@ This project is not implemented already.
 - [x] Mavlink v1 SysID-CompID filter (__implemented__)
 - [x] Mavlink v1 MsgID filter (__implemented__)
 - [x] Mavlink v1 MsgID frequency reducer (__implemented__)
+- [ ] Mavlink v2 protocol recognizer
 - [ ] Mavlink v2 filters
 - [x] UBX protocol recognizer (__basic tested__)
 - [x] NMEA protocol recognizer (__implemented__)
@@ -47,4 +48,35 @@ This project is not implemented already.
 - [ ] Filter plugins
 - [ ] General plugins
 ### Others
-- [ ] Docker build & execute container
+- [X] Docker build container (__basic tested__)
+- [ ] Docker execute container
+
+## Build
+```
+git clone --recurse-submodules https://github.com/uav-router/uav_router.git
+cd uav_router
+docker/configure
+docker/build
+```
+### Cross build
+Install qemu properly. (See below)
+```
+docker/configure arm32 #arm64 amd64
+docker/build arm32 #arm64 amd64
+```
+
+#### Fedora host
+```
+dnf install qemu qemu-user-static
+docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
+```
+#### Ubuntu host
+```
+sudo apt-get install qemu binfmt-support qemu-user-static
+docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
+```
+### Use Ubuntu images
+```
+docker/configure amd64 ubuntu
+docker/build
+```

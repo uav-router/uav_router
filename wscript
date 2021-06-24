@@ -4,7 +4,7 @@
 import os
 
 VERSION='0.0.1'
-APPNAME='ioloop_test'
+APPNAME='uav-router'
 
 # these variables are mandatory ('/' are converted automatically)
 top = '.'

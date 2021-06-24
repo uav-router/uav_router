@@ -43,7 +43,7 @@ public:
             ret |= AVAHI_WATCH_OUT;
         if (flags & EPOLLERR)
             ret |= AVAHI_WATCH_ERR;
-        if (flags & EPOLLHUP | EPOLLRDHUP)
+        if (flags & (EPOLLHUP | EPOLLRDHUP))
             ret |= AVAHI_WATCH_HUP;
         return (AvahiWatchEvent)ret;
     }
