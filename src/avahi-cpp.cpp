@@ -430,6 +430,9 @@ public:
 
 auto AvahiHandler::create(const AvahiPoll* poll, AvahiClientFlags flags) -> std::unique_ptr<AvahiHandler> {
     auto* obj = new AvahiHandlerImpl{};
-    obj->init(poll,flags);
+    error_c ret = obj->init(poll,flags);
+    if (ret) {
+        log.error()<<"Error create AvahiClient "<<ret<<Log::endl;
+    }
     return std::unique_ptr<AvahiHandler>(obj);
 }

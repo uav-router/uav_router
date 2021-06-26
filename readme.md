@@ -47,9 +47,20 @@ This project is not implemented already.
 ### Plugins
 - [ ] Filter plugins
 - [ ] General plugins
-### Others
+### Docker support
 - [X] Docker build container (__basic tested__)
-- [ ] Docker execute container
+- [X] Docker execute container (__basic tested__)
+    - fedora based
+    - ubuntu based
+    - scratch run images
+- [ ] DockerHub hosted images
+### Others
+- [ ] Investigate of using crash handling (sentry?, breakpad?, crashpad?)
+- [ ] Implement global configuration
+    - switch off zeroconf
+    - switch on Ctrl-C handler
+    - switch off udev monitoring
+    - using crash handler
 
 ## Build
 ```
@@ -79,4 +90,13 @@ docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
 ```
 docker/configure amd64 ubuntu
 docker/build
+```
+### Build Docker image
+```
+docker/image # amd64 arm64 arm32
+```
+## Run
+Run docker container with image
+```
+docker/uav-router /path/to/config/file.yml
 ```

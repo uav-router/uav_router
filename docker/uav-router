@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+case $(uname -m) in
+    aarch64 ) arch=arm64 ;;
+    armv7l ) arch=arm32 ;;
+    x86_64 ) arch=amd64 ;;
+esac
+# zeroconf support:
+#   fedora based image requires map dbus to /run/dbus
+#   ubuntu based image requires map dbus to /var/run/dbus
+#   This script maps both location
+docker run  -v /var/run/dbus:/var/run/dbus \
+            -v /var/run/dbus:/run/dbus \
+            --privileged \
+            --net host \
+            -v $1:/app/config.yml \
+            -it --rm \
+            uav-router:$arch /app/config.yml

@@ -8,8 +8,8 @@ case $distro in
 esac
 cd $distro
 case $(uname -m) in
-    aarch64 ) arch=amd64 ;;
-    armv7l ) arch=amd64 ;;
+    aarch64 ) arch=arm64 ;;
+    armv7l ) arch=arm32 ;;
     x86_64 ) arch=amd64 ;;
 esac
 dest=${1:-$arch}
