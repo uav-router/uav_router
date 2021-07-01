@@ -1,5 +1,0 @@
-#!/usr/bin/env bash
-
-# echo $( cd "$(dirname "${BASH_SOURCE[0]}")/../build" && pwd )
-rm -rf $( cd "$(dirname "${BASH_SOURCE[0]}")/../build" && pwd )
-rm -rf $( cd "$(dirname "${BASH_SOURCE[0]}")/../dependencies/yaml-cpp/build" && pwd )

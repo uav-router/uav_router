@@ -61,6 +61,11 @@ This project is not implemented already.
     - switch on Ctrl-C handler
     - switch off udev monitoring
     - using crash handler
+- [ ] Logging. Make stdout/stderr/file output
+- [X] Divide binaries to:
+    - base library (errors handling, logging)
+    - io library (epoll, sockets, uarts, udev, zeroconf)
+    - router app
 
 ## Build
 ```
