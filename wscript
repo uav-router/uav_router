@@ -17,6 +17,7 @@ def bool_opt(opt):
 def options(opt):
     opt.add_option('--sentry', action='store', default="no", type="choice", choices=["yes","no"], help='sentry integration')
     opt.add_option('--yaml', action='store', default="yes", type="choice", choices=["yes","no"], help='with yaml configuration')
+    opt.add_option('--install_lib', action='store', default="no", type="choice", choices=["yes","no"], help='library installation')
     opt.load('compiler_cxx')
 
 def distclean(ctx):
@@ -45,6 +46,8 @@ def configure(conf):
 def build(bld):
     print('sentry\t- %r' % bld.env.SENTRY)
     print('yaml\t- %r' % bld.env.YAML)
+    print('Build command: %s' % bld.cmd)
+    print('Prefix: %s' % bld.env.PREFIX)
     base_src = [ bld.path.find_node('src/err.cpp'),
                 bld.path.find_node('src/log.cpp')]
     io_src =  [src for src in bld.path.find_node('src').ant_glob('*.cpp') if src not in base_src]
@@ -61,18 +64,25 @@ def build(bld):
         defs.append('YAML_CONFIG')
         libpath.append(yamllib.abspath())
         incs.append('dependencies/yaml-cpp/include')
-    
+    lib_path=None
+    if bld.options.install_lib == 'yes':
+        lib_path='lib'
+        bld.install_files('include/uavlib',bld.path.find_node('src').ant_glob('*.h'))
+        bld.install_files('include/uavlib/inc',bld.path.find_node('src/inc').ant_glob('*.h'))
+
     bld.stlib(
         source   = base_src,
         target   = 'uavr-base',
         defines  = defs,
-        includes = incs
+        includes = incs,
+        install_path = lib_path
     )
     bld.stlib(
         source   = io_src,
         target   = 'uavr-io',
         defines  = defs,
-        includes = incs
+        includes = incs,
+        install_path = lib_path
     )
     incs.append('src')
     for test in tests:
@@ -83,7 +93,8 @@ def build(bld):
             includes     = incs,
             defines      = defs,
             lib          = libs,
-            libpath      = libpath
+            libpath      = libpath,
+            install_path = None
         )
     if bld.env.YAML=='yes':
         bld.program(
