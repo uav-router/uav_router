@@ -15,3 +15,6 @@ logging:
   debug:
     - ioloop
     - uart
+config:
+  test: divzero
+  ctrl-C: true

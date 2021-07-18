@@ -35,3 +35,6 @@ build/
 bintest/
 .lock*
 .cache/
+dependencies/sentry-native-0.4.10
+.sentryclirc
+.sentry-native

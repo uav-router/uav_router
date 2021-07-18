@@ -12,6 +12,13 @@
 #include <unistd.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <chrono>
+using namespace std::chrono_literals;
+
+
+#ifdef USING_SENTRY
+#include <sentry.h>
+#endif
 
 
 Log::Log rlog {"router"};
@@ -435,15 +442,45 @@ std::string expand_shell_variables(std::string data) {
     return std::move(data);
 }
 
+#ifdef USING_SENTRY
+static void
+print_envelope(sentry_envelope_t *envelope, void *unused_state)
+{
+    (void)unused_state;
+    size_t size_out = 0;
+    char *s = sentry_envelope_serialize(envelope, &size_out);
+    printf("%s", s);
+    sentry_free(s);
+    sentry_envelope_free(envelope);
+}
+class Sentry {
+public:
+    void init(YAML::Node cfg) {
+        sentry_options_t *options = sentry_options_new();
+        sentry_options_set_dsn(options, "https://657e42f753e64d4591e29f034782803d@o884048.ingest.sentry.io/5837073");
+        sentry_options_set_release(options, GIT_COMMIT);
+        //sentry_options_set_transport(options, sentry_transport_new(print_envelope));
+        sentry_init(options);
+        _initialized = true;
+    }
+    ~Sentry() {
+        if (_initialized) {
+            sentry_close();
+        }
+    }
+private:
+    bool _initialized = false;
+};
+#endif
+
 int main(int argc, char *argv[]) {
+#ifdef USING_SENTRY
+    Sentry sentry;
+#endif
+    std::unique_ptr<Timer> timer;
     Log::init();
     Log::set_level(Log::Level::DEBUG,{"router"});
     auto loop = IOLoop::loop();
-    error_c ec = loop->handle_CtrlC();
-    if (ec) {
-        std::cerr<<"Ctrl-C handler error "<<ec<<std::endl;
-        return 1;
-    }
     std::string config_file_name = "config.yaml";
     if (argc>1) {
         config_file_name = argv[1];
@@ -452,6 +489,33 @@ int main(int argc, char *argv[]) {
     std::string expanded = std::move(expand_shell_variables(read_file(config_file_name)));
     if (expanded.empty()) return 1;
     YAML::Node config = YAML::Load(expanded);
+    auto global_cfg = config["config"];
+    if (global_cfg && global_cfg.IsMap()) {
+#ifdef USING_SENTRY
+        sentry.init(global_cfg["sentry"]);
+#endif        
+        auto test = global_cfg["test"];
+        if (test && test.IsScalar() && test.as<std::string>()=="divzero") {
+            timer = loop->timer();
+            int var = 0;
+            timer->shoot([&var](){
+                var = 10/0;
+                var+=2;
+            }).arm_oneshoot(5s);
+        }
+        bool ctrlC = true;
+        auto ctrlC_cfg = global_cfg["ctrl-C"];
+        if (ctrlC_cfg && ctrlC_cfg.IsScalar()) {
+            ctrlC = ctrlC_cfg.as<bool>();
+        }
+        if (ctrlC) {
+            error_c ec = loop->handle_CtrlC();
+            if (ec) {
+                std::cerr<<"Ctrl-C handler error "<<ec<<std::endl;
+                return 1;
+            }
+        }
+    }
     load_loggers(config["logging"]);
     if (!load_routes(config["routes"])) return 2;
     loop->zeroconf_ready([&loop,endpoints = config["endpoints"]](){

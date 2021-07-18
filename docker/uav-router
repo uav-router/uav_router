@@ -12,6 +12,6 @@ docker run  -v /var/run/dbus:/var/run/dbus \
             -v /var/run/dbus:/run/dbus \
             --privileged \
             --net host \
-            -v $1:/app/config.yml \
+            -v $1:/etc/config.yml \
             -it --rm \
-            uav-router:$arch /app/config.yml
+            uav-router:$arch /etc/config.yml

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
 mkdir -p /uav-router/bintest/dist
-cp /uav-router/build/uav-router /app
-dockerize --output-dir /uav-router/bintest/dist -n -e /app/uav-router /app/uav-router
+cd /uav-router
+waf install
+dockerize --output-dir /uav-router/bintest/dist -n -e /usr/bin/uav-router /usr/bin/uav-router
