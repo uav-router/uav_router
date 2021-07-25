@@ -1,0 +1,2 @@
+#!/usr/bin/env bash
+docker run --rm -v $(pwd):/work getsentry/sentry-cli upload-dif  build/debugsym

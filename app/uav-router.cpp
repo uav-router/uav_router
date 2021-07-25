@@ -476,6 +476,7 @@ private:
 int main(int argc, char *argv[]) {
 #ifdef USING_SENTRY
     Sentry sentry;
+    std::cout<<"PID:"<<getpid()<<std::endl;
 #endif
     std::unique_ptr<Timer> timer;
     Log::init();
@@ -496,9 +497,11 @@ int main(int argc, char *argv[]) {
 #endif        
         auto test = global_cfg["test"];
         if (test && test.IsScalar() && test.as<std::string>()=="divzero") {
+            std::cout<<"Start divzero test"<<std::endl;
             timer = loop->timer();
             int var = 0;
             timer->shoot([&var](){
+                std::cout<<"Do divzero"<<std::endl;
                 var = 10/0;
                 var+=2;
             }).arm_oneshoot(5s);

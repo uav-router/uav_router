@@ -38,7 +38,10 @@
             ],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
-            "environment": [],
+            "environment": [{
+                "name":"LD_LIBRARY_PATH",
+                "value":"/home/andrej/test/uav_router/dependencies/sentry-native-0.4.10/install/usr/local/lib64/"
+            }],
             "externalConsole": false,
             "MIMode": "gdb",
             "setupCommands": [
