@@ -1,0 +1,13 @@
+if [[ -n $1 ]]; then 
+    archs=(arm32 arm64 amd64)
+    if [[ " ${archs[@]} " =~ " ${1} " ]]; then
+        echo "arch $1"
+        shift    
+    else
+        echo "arch default"
+    fi
+else
+    echo "var is unset"
+fi
+
+echo "$@"

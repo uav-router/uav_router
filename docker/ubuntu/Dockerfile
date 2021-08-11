@@ -16,4 +16,7 @@ RUN curl --insecure -o waf.tar.bz2 https://waf.io/waf-2.0.22.tar.bz2 && \
     waf -h
 RUN pip3 install --no-cache-dir setuptools && \
     pip3 install --no-cache-dir git+https://github.com/larsks/dockerize
-COPY image /usr/bin/
+VOLUME /uav-router
+WORKDIR /uav-router
+ENTRYPOINT ["waf"]
+CMD [ "--help" ]

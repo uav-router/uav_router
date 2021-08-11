@@ -25,10 +25,8 @@ case $dest in
         exit 1
         ;;
 esac
-mkdir -p bintest/dist
-#docker run --platform=$platform -it --rm --user $(id -u):$(id -g) -v $(pwd):/uav-router uav-router_builder:$ext image
-docker run --platform=$platform -it --rm -v $(pwd):/uav-router uav-router_builder:$ext image
+docker run --platform=$platform --rm -v $(pwd):/uav-router uav-router_builder:$ext install dockerize --docker_dir=/uav-router/bintest/dist --prefix=/usr
 cd bintest/dist
 docker build --platform=$platform -t uav-router:$ext .
 cd ../..
-sudo rm -rf bintest/dist
+#sudo rm -rf bintest/dist

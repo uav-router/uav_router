@@ -1,28 +1,34 @@
 #!/usr/bin/env bash
 
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
+
 case $(uname -m) in
     aarch64 ) arch=arm64 ;;
     armv7l ) arch=arm32 ;;
     x86_64 ) arch=amd64 ;;
 esac
-dest=${1:-$arch}
-case $dest in
+
+if [ -n $1 ]; then 
+    archs=(arm32 arm64 amd64)
+    if [[ " ${archs[@]} " =~ " ${1} " ]]; then
+        arch=$1
+        shift
+        echo "explicit arch $@"
+    fi
+fi
+case $arch in
     arm64 ) 
         platform=linux/arm64
-        ext=arm64
         ;;
     arm32 ) 
         platform=linux/arm
-        ext=arm32
         ;;
     amd64 ) 
         platform=linux/amd64
-        ext=amd64
         ;;
     * ) 
         echo "Unknown platform"
         exit 1
         ;;
 esac
-docker run --platform=$platform --rm --user $(id -u):$(id -g) -v $(pwd):/uav-router uav-router_builder:$ext bash -c "cd /uav-router && waf distclean"
+docker run --platform=$platform --rm --user $(id -u):$(id -g) -v $(pwd):/uav-router uav-router_builder:$arch "$@"

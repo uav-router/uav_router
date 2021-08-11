@@ -476,7 +476,6 @@ private:
 int main(int argc, char *argv[]) {
 #ifdef USING_SENTRY
     Sentry sentry;
-    std::cout<<"PID:"<<getpid()<<std::endl;
 #endif
     std::unique_ptr<Timer> timer;
     Log::init();
@@ -496,15 +495,29 @@ int main(int argc, char *argv[]) {
         sentry.init(global_cfg["sentry"]);
 #endif        
         auto test = global_cfg["test"];
-        if (test && test.IsScalar() && test.as<std::string>()=="divzero") {
-            std::cout<<"Start divzero test"<<std::endl;
-            timer = loop->timer();
-            int var = 0;
-            timer->shoot([&var](){
-                std::cout<<"Do divzero"<<std::endl;
-                var = 10/0;
-                var+=2;
-            }).arm_oneshoot(5s);
+        if (test && test.IsScalar()) {
+            auto test_name = test.as<std::string>();
+            std::cout<<"Test "<<test_name<<std::endl;
+            if (test_name == "divzero") {
+                std::cout<<"Start divzero test"<<std::endl;
+                timer = loop->timer();
+                int var = 0;
+                timer->shoot([&var](){
+                    std::cout<<"Do divzero"<<std::endl;
+                    var = 10/var;
+                    var+=2;
+                    std::cout<<"After divzero"<<std::endl;
+                }).arm_oneshoot(5s);
+            } else if (test_name == "segfault") {
+                std::cout<<"Start segfault test"<<std::endl;
+                timer = loop->timer();
+                int var = 0;
+                timer->shoot([&var](){
+                    std::cout<<"Do segfault"<<std::endl;
+                    *(int*)0=0;
+                    std::cout<<"After segfault"<<std::endl;
+                }).arm_oneshoot(5s);
+            }
         }
         bool ctrlC = true;
         auto ctrlC_cfg = global_cfg["ctrl-C"];
