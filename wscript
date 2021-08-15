@@ -2,10 +2,11 @@
 # encoding: utf-8
 
 import os
+import platform
+
 from waflib.Scripting import distclean as original_distclean
 import waflib
 import hashlib
-import platform
 
 VERSION='0.0.1'
 APPNAME='uav-router'
@@ -13,6 +14,11 @@ APPNAME='uav-router'
 # these variables are mandatory ('/' are converted automatically)
 top = '.'
 out = 'build_'+platform.machine()
+yaml_out = out+'/yaml-cpp'
+deps_install = out+'/deps_install'
+
+from waflib.Tools.compiler_cxx import cxx_compiler
+cxx_compiler['linux'] = ['clang++','g++']
 
 def dinfo(ctx):
     ret = ctx.exec_command("mkdir -p debugsym", shell=True)
@@ -34,14 +40,10 @@ def options(opt):
     opt.add_option('--yaml', action='store', default="yes", type="choice", choices=["yes","no"], help='with yaml configuration')
     opt.add_option('--install_lib', action='store', default="no", type="choice", choices=["yes","no"], help='library installation')
     opt.add_option('--build_tests', action='store', default="no", type="choice", choices=["yes","no"], help='build tests')
-    opt.add_option('--docker_dir', action='store', default="/uav-router/bintest/dist", help='directory to store docker image sources')
     opt.load('compiler_cxx')
 
 def distclean(ctx):
     original_distclean(ctx)
-    build_dir = ctx.path.make_node('dependencies/yaml-cpp/'+out)
-    if build_dir.exists():
-        build_dir.delete()
     sentry_dir = ctx.path.make_node('dependencies/sentry-native-0.4.10')
     if sentry_dir.exists():
         sentry_dir.delete()
@@ -56,21 +58,26 @@ def configure(conf):
     conf.env.YAML = conf.options.yaml
     
 def build_deps(conf):
-    build_dir = conf.path.make_node('dependencies/yaml-cpp/'+out)
+    install_dir = conf.path.make_node(deps_install)
+    if not install_dir.exists():
+        install_dir.mkdir()
+    build_dir = conf.path.make_node(yaml_out)
     if not build_dir.exists():
         print('Build yaml-cpp dependency...')
         build_dir.mkdir()
         print('Run cmake...')
         #ret = conf.exec_command('cmake --version')
         ret = conf.exec_command(
-            'cmake -S dependencies/yaml-cpp -B dependencies/yaml-cpp/{} -DYAML_CPP_BUILD_TESTS=OFF'.format(out)
+            'cmake -S dependencies/yaml-cpp -B {} -DYAML_CPP_BUILD_TESTS=OFF'.format(build_dir.abspath())
         )
         if ret: conf.fatal('cmake error %i'%ret)
         print('Run make...')
         ret = conf.exec_command(
-            ['make','-C','dependencies/yaml-cpp/'+out],
+            ['make','-C', build_dir.abspath()],
         )
         if ret: conf.fatal('make error %i'%ret)
+        ret = conf.exec_command(['make','DESTDIR={}'.format(install_dir.abspath()),'install','-C', build_dir.abspath()])
+        if ret: conf.fatal('make install error %i'%ret)
         print('Build yaml-cpp complete')
     print('Build sentry dependency ...')
     sentry_dir = conf.path.make_node('dependencies/sentry-native-0.4.10') 
@@ -97,29 +104,29 @@ def build_deps(conf):
         print('Clean unused files ...')
         conf.path.find_node('dependencies/sentry.tar.gz').delete()
         conf.path.find_node('dependencies/breakpad').delete()
-    build_dir = conf.path.make_node('dependencies/sentry-native-0.4.10/'+out)
+    build_dir = conf.path.make_node(out+'/sentry')
     if not build_dir.exists():
+        build_dir.mkdir()
         print('Run cmake...')
-        ret = conf.exec_command(['cmake','-Bdependencies/sentry-native-0.4.10/'+out,'-Sdependencies/sentry-native-0.4.10'])
+        ret = conf.exec_command('cmake -B {} -Sdependencies/sentry-native-0.4.10'.format(build_dir.abspath()))
         if ret: conf.fatal('cmake error %i'%ret)
         print('Run make...')
-        ret = conf.exec_command(['make','-C','dependencies/sentry-native-0.4.10/'+out])
+        ret = conf.exec_command(['make','-C',build_dir.abspath()])
         if ret: conf.fatal('make error %i'%ret)
         print('Run make install...')
-        ret = conf.exec_command(['make','DESTDIR=../install_'+platform.machine(),'install','-C','dependencies/sentry-native-0.4.10/'+out])
+        ret = conf.exec_command(['make','DESTDIR={}'.format(install_dir.abspath()),'install','-C', build_dir.abspath()])
         if ret: conf.fatal('make install error %i'%ret)
         print('Build sentry complete')
 
 def dockerize(conf):
-    output = conf.path.make_node(conf.options.docker_dir)
+    output = conf.path.make_node(out+'/docker_image')
     if output.exists():
         output.delete()
     output.mkdir()
-    print(conf.options.docker_dir)
     print(conf.options.prefix)
     print('Run dockerize...')
     executable_path = conf.options.prefix + '/bin/uav-router'
-    ret = conf.exec_command(['dockerize', '--output-dir', conf.options.docker_dir, '-n', '-e', executable_path, executable_path])
+    ret = conf.exec_command(['dockerize', '--output-dir', output.abspath(), '-n', '-e', executable_path, executable_path])
     if ret: conf.fatal('dockerize error %i'%ret)
 
 def build(bld):
@@ -137,25 +144,25 @@ def build(bld):
     defs = []
     libpath = []
     incs = []
+    deps_libs = bld.path.find_node(deps_install+'/usr/local/lib')
+    libinst = 'lib'
+    if not deps_libs: 
+        deps_libs = bld.path.find_node(deps_install+'/usr/local/lib64')
+        libinst = 'lib64'
     if bld.env.YAML=='yes':
-        yamllib = bld.path.find_node('dependencies/yaml-cpp/'+out)
         libs.append('yaml-cpp')
         defs.append('YAML_CONFIG')
-        libpath.append(yamllib.abspath())
-        incs.append('dependencies/yaml-cpp/include')
+        libpath.append(deps_libs.abspath())
+        incs.append(deps_install+'/usr/local/include')
     if bld.env.SENTRY=='yes':
-        sentrylib = bld.path.find_node('dependencies/sentry-native-0.4.10/install_{}/usr/local/lib'.format(platform.machine()))
-        libinst = 'lib'
-        if not sentrylib: 
-            sentrylib = bld.path.find_node('dependencies/sentry-native-0.4.10/install_{}/usr/local/lib64'.format(platform.machine()))
-            libinst = 'lib64'
         libs.append('sentry')
         defs.append('USING_SENTRY')
         commit_hash=bld.cmd_and_log('git rev-parse --short HEAD', output=waflib.Context.STDOUT)
         defs.append('GIT_COMMIT=\"{}\"'.format(commit_hash[:-1]))
-        libpath.append(sentrylib.abspath())
-        incs.append('dependencies/sentry-native-0.4.10/install_{}/usr/local/include'.format(platform.machine()))
-        bld.install_files(libinst,sentrylib.ant_glob('*.so'))
+        if bld.env.YAML!='yes':
+            libpath.append(deps_libs.abspath())
+            incs.append(deps_install+'/usr/local/include')
+        bld.install_files(libinst,deps_libs.ant_glob('*.so'))
     lib_path=None
     if bld.options.install_lib == 'yes':
         lib_path='lib'
@@ -203,3 +210,9 @@ def build(bld):
         
     else:
         print('uav-router is built with yamp-cpp dependency only')
+
+# cross build
+# cp sysroot/fedora-arm64/usr/lib64/clang/12.0.1/lib/libclang_rt.* /usr/lib64/clang/12.0.1/lib/linux/
+# cp sysroot/fedora-arm32/usr/lib/clang/12.0.1/lib/libclang_rt.* /usr/lib64/clang/12.0.1/lib/linux/
+# clang++ --target=arm-linux-gnueabihf --rtlib=compiler-rt --sysroot=sysroot/fedora-arm32 -fuse-ld=lld hello.cpp -o hello
+# clang++ --target=aarch64-linux-gnu --rtlib=compiler-rt --sysroot=sysroot/fedora-arm64 -fuse-ld=lld hello.cpp -o hello

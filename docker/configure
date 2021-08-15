@@ -40,4 +40,4 @@ else
     container_dir=/uav-router
 fi
 docker build --platform=$platform --build-arg BASE_IMAGE=$base_image -t uav-router_builder:$ext .
-docker run --rm --platform=$platform --user $(id -u):$(id -g) -v $(pwd)/../..:$container_dir uav-router_builder:$ext configure build_deps -v --prefix=/usr --check-cxx-compiler=clang++ --sentry=yes
+docker run --rm --platform=$platform -e WAFLOCK=".lock-waf_linux_build-$dest" --user $(id -u):$(id -g) -v $(pwd)/../..:$container_dir uav-router_builder:$ext configure build_deps -v --prefix=/usr --sentry=yes
