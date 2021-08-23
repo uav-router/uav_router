@@ -1,11 +1,14 @@
 #!/usr/bin/env bash
+set -e
+script_dir=$(dirname "$(readlink -f $0)")
+
 if [[ $(uname -m) != "x86_64" ]]; then
     echo "This script is for x86_64 arch"
     exit 1
 fi
 distro=fedora
 ver=34
-cd $(dirname "${BASH_SOURCE[0]}")/../${distro}
+cd $script_dir/../${distro}
 docker build \
     --build-arg BASE_IMAGE="amd64/${distro}:${ver}" \
     --build-arg WAFLOCK=".lock-waf_linux_build-amd64" \

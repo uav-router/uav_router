@@ -57,6 +57,7 @@ This project is not implemented already.
     - scratch run images
 - [ ] DockerHub hosted images
 ### Others
+- [X] Crash diagnostic with [sentry](https://sentry.io/)
 - [ ] Implement global configuration
     - switch off zeroconf
     - switch on Ctrl-C handler
@@ -69,4 +70,15 @@ This project is not implemented already.
     - router app
 
 ## [Build](build.md)
+## Usage
+### From DockerHub
+```
+docker run  -v /var/run/dbus:/run/dbus \
+            --privileged \
+            --net host \
+            -v your_config_file.yml:/etc/config.yml \
+            -rm \
+            --init \
+            uavrouter/uav-router:latest /etc/config.yml
+```
 

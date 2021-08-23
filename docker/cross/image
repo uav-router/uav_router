@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
-cd "$(dirname "${BASH_SOURCE[0]}")/../.."
+set -e
+script_dir=$(dirname "$(readlink -f $0)")
+cd "$script_dir/../.."
 docker run --rm --user $(id -u):$(id -g) -v $(pwd):/uav-router uav-router_crossbuild:amd64 image
-cd "$(dirname "${BASH_SOURCE[0]}")/../../docker_image"
+cd $script_dir/../../docker_image
 machine=$(readelf -h sysroot/usr/bin/uav-router | grep Machine | awk -F ':' '{gsub(/^[ \t]+|[ \t]+$/, "", $2); print $2}')
 declare -A archs=( ["AArch64"]="arm64" ["ARM"]="arm32" ["Advanced Micro Devices X86-64"]="amd64")
-docker build -t uav-router_cross:${archs["$machine"]} .
+docker build -t uav-router:${archs["$machine"]} .

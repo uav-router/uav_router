@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-cd $(dirname "${BASH_SOURCE[0]}")/../..
+set -e
+script_dir=$(dirname "$(readlink -f $0)")
+cd $script_dir/../..
 if [[ $(uname -m) != "x86_64" ]]; then
     echo "This script is for x86_64 arch"
     exit 1

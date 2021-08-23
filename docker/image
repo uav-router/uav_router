@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-
-cd "$(dirname "${BASH_SOURCE[0]}")/.."
+set -e
+script_dir=$(dirname "$(readlink -f $0)")
+cd "$script_dir/.."
 case $(uname -m) in
     aarch64 ) arch=arm64 ;;
     armv7l ) arch=arm32 ;;

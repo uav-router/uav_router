@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+set -e
+script_dir=$(dirname "$(readlink -f $0)")
+cd $script_dir/../..
+waf upload_sym
+docker tag uav-router:arm32 uavrouter/uav-router:arm32
+docker tag uav-router:arm64 uavrouter/uav-router:arm64
+docker tag uav-router:amd64 uavrouter/uav-router:amd64
+docker push uavrouter/uav-router:arm32
+docker push uavrouter/uav-router:arm64
+docker push uavrouter/uav-router:amd64
+docker manifest create \
+    uavrouter/uav-router:latest \
+    --amend uavrouter/uav-router:arm32 \
+    --amend uavrouter/uav-router:arm64 \
+    --amend uavrouter/uav-router:amd64
+docker manifest push uavrouter/uav-router:latest
