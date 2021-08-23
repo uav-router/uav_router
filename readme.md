@@ -1,4 +1,6 @@
 # UAV-Router
+The router for protocols used in UAV. Mavlink, UBX, NMEA, RTCM3 support.
+
 This project is not implemented already.
 ## Features
 ### Communications
@@ -55,7 +57,6 @@ This project is not implemented already.
     - scratch run images
 - [ ] DockerHub hosted images
 ### Others
-- [ ] Investigate of using crash handling (sentry?, breakpad?, crashpad?)
 - [ ] Implement global configuration
     - switch off zeroconf
     - switch on Ctrl-C handler
@@ -67,4 +68,5 @@ This project is not implemented already.
     - io library (epoll, sockets, uarts, udev, zeroconf)
     - router app
 
-[Build](build.md)
+## [Build](build.md)
+

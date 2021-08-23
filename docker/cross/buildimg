@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+if [[ $(uname -m) != "x86_64" ]]; then
+    echo "This script is for x86_64 arch"
+    exit 1
+fi
+distro=fedora
+ver=34
+cd $(dirname "${BASH_SOURCE[0]}")/../${distro}
+docker build \
+    --build-arg BASE_IMAGE="amd64/${distro}:${ver}" \
+    --build-arg WAFLOCK=".lock-waf_linux_build-amd64" \
+    -t uav-router_builder:amd64 .
+docker build \
+    --platform=linux/arm64 \
+    --build-arg BASE_IMAGE="arm64v8/${distro}:${ver}" \
+    --build-arg WAFLOCK=".lock-waf_linux_build-arm64" \
+    -t uav-router_builder:arm64 .
+docker build \
+    --platform=linux/arm64 \
+    --build-arg BASE_IMAGE="arm32v7/${distro}:${ver}" \
+    --build-arg WAFLOCK=".lock-waf_linux_build-arm32" \
+    -t uav-router_builder:arm32 .
+cd ../crossbuild
+sudo rm -rf sysroot
+mkdir -p sysroot/arm32/etc
+mkdir -p sysroot/arm64/etc
+id=$(docker create --platform=linux/arm uav-router_builder:arm32)
+sudo docker cp $id:/usr sysroot/arm32
+docker rm -v $id
+sudo chown -R $(id -u):$(id -g) sysroot/arm32
+sudo rm sysroot/arm32/usr/bin/sudo*
+chmod +w sysroot/arm32/usr/lib
+rm sysroot/arm32/usr/lib/libnssckbi.so
+cp sysroot/arm32/usr/lib/pkcs11/p11-kit-trust.so sysroot/arm32/usr/lib/libnssckbi.so
+id=$(docker create --platform=linux/arm64 uav-router_builder:arm64)
+sudo docker cp $id:/usr sysroot/arm64
+docker rm -v $id
+sudo chown -R $(id -u):$(id -g) sysroot/arm64
+sudo rm sysroot/arm64/usr/bin/sudo*
+chmod +w sysroot/arm64/usr/lib64
+rm sysroot/arm64/usr/lib64/libnssckbi.so
+cp sysroot/arm64/usr/lib64/pkcs11/p11-kit-trust.so sysroot/arm64/usr/lib64/libnssckbi.so
+docker build -t uav-router_crossbuild:amd64 .

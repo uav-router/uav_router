@@ -1,0 +1,14 @@
+set(CMAKE_SYSTEM_NAME Linux)
+
+set(triple aarch64-linux-gnu)
+
+set(CMAKE_C_COMPILER /usr/bin/clang)
+set(CMAKE_C_COMPILER_TARGET ${triple})
+set(CMAKE_CXX_COMPILER /usr/bin/clang++)
+set(CMAKE_CXX_COMPILER_TARGET ${triple})
+#set(CMAKE_MAKE_PROGRAM /usr/bin/make)
+
+set(CMAKE_EXE_LINKER_FLAGS "-fuse-ld=lld")
+set(CMAKE_SHARED_LINKER_FLAGS "-fuse-ld=lld")
+set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)
+set(CMAKE_SYSROOT /sysroot/arm64/)

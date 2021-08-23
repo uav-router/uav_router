@@ -1,0 +1,3 @@
+- check docker build on ubuntu images
+- crash signal handlers works unproperly in AArch64 docker container
+- dockerize tool works unproperly in AArch64 docker container

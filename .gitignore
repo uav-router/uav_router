@@ -32,10 +32,10 @@
 *.app
 
 build_*/
-debugsym/
-bintest/
-.lock*
+/debugsym/
+/bintest/
+/docker_image/
+/.lock*
 .cache/
-dependencies/sentry-native-0.4.10/
 .sentryclirc
 .sentry-native

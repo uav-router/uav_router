@@ -28,8 +28,6 @@ case $dest in
         exit 1
         ;;
 esac
-docker run -e WAFLOCK=".lock-waf_linux_build-$dest" --platform=$platform --rm -v $(pwd):/uav-router uav-router_builder:$ext install dockerize --prefix=/usr -v
+docker run --platform=$platform --rm -v $(pwd):/uav-router uav-router_builder:$ext install dockerize --prefix=/usr -v
 cd $image_dir
 docker build --platform=$platform -t uav-router:$ext .
-cd -
-#sudo rm -rf bintest/dist

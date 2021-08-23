@@ -1,4 +1,5 @@
 ARG BASE_IMAGE
+ARG WAFLOCK
 FROM $BASE_IMAGE
 ENV TZ=UTC
 ENV DEBIAN_FRONTEND=noninteractive
@@ -20,3 +21,4 @@ VOLUME /uav-router
 WORKDIR /uav-router
 ENTRYPOINT ["waf"]
 CMD [ "--help" ]
+ENV WAFLOCK="$WAFLOCK"

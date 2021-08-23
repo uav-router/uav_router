@@ -23,7 +23,7 @@ cxx_compiler['linux'] = ['clang++','g++']
 def dinfo(ctx):
     ret = ctx.exec_command("mkdir -p debugsym", shell=True)
     if ret: return ret
-    ret = ctx.exec_command('objcopy --only-keep-debug {0}/uav-router debugsym/uav-router.debug'.format(out), shell=True)
+    ret = ctx.exec_command('llvm-objcopy --only-keep-debug {0}/uav-router debugsym/uav-router.debug'.format(out), shell=True)
     if ret: return ret
     h = hashlib.new('md5')
     h.update(open('debugsym/uav-router.debug','rb').read())
@@ -40,7 +40,9 @@ def options(opt):
     opt.add_option('--yaml', action='store', default="yes", type="choice", choices=["yes","no"], help='with yaml configuration')
     opt.add_option('--install_lib', action='store', default="no", type="choice", choices=["yes","no"], help='library installation')
     opt.add_option('--build_tests', action='store', default="no", type="choice", choices=["yes","no"], help='build tests')
+    opt.add_option('--deps-target', action='store', default="native", type="choice", choices=["arm32","arm64","native"], help='target platform to build dependencies')
     opt.load('compiler_cxx')
+    opt.load('clangxx_cross')
 
 def distclean(ctx):
     original_distclean(ctx)
@@ -49,15 +51,20 @@ def distclean(ctx):
         sentry_dir.delete()
 
 def configure(conf):
-    #waf configure --check-cxx-compiler=clang++
     conf.load('compiler_cxx')
+    conf.load('clangxx_cross')
     conf.load('clang_compilation_database')
     conf.env.CPPFLAGS = ['-g','-std=c++17']
-    conf.env.LDFLAGS = ['-Wl,--build-id=sha1']
+    conf.env.append_value('LDFLAGS',['-Wl,--build-id=sha1','-fuse-ld=lld'])
     conf.env.SENTRY = conf.options.sentry
     conf.env.YAML = conf.options.yaml
     
 def build_deps(conf):
+    toolchain = None
+    if conf.options.deps_target=='arm32':
+        toolchain = conf.path.find_node('docker/cmake-toolchains/arm32.toolchain')
+    elif conf.options.deps_target=='arm64':
+        toolchain = conf.path.find_node('docker/cmake-toolchains/arm64.toolchain')
     install_dir = conf.path.make_node(deps_install)
     if not install_dir.exists():
         install_dir.mkdir()
@@ -66,10 +73,9 @@ def build_deps(conf):
         print('Build yaml-cpp dependency...')
         build_dir.mkdir()
         print('Run cmake...')
-        #ret = conf.exec_command('cmake --version')
-        ret = conf.exec_command(
-            'cmake -S dependencies/yaml-cpp -B {} -DYAML_CPP_BUILD_TESTS=OFF'.format(build_dir.abspath())
-        )
+        cmdline = 'cmake -S dependencies/yaml-cpp -B {} -DYAML_CPP_BUILD_TESTS=OFF'.format(build_dir.abspath())
+        if toolchain: cmdline += ' -DCMAKE_TOOLCHAIN_FILE={}'.format(toolchain.abspath())
+        ret = conf.exec_command(cmdline)
         if ret: conf.fatal('cmake error %i'%ret)
         print('Run make...')
         ret = conf.exec_command(
@@ -80,35 +86,13 @@ def build_deps(conf):
         if ret: conf.fatal('make install error %i'%ret)
         print('Build yaml-cpp complete')
     print('Build sentry dependency ...')
-    sentry_dir = conf.path.make_node('dependencies/sentry-native-0.4.10') 
-    if not sentry_dir.exists():
-        print('Download sentry ...')
-        ret = conf.exec_command(
-            ['curl','-Lo','dependencies/sentry.tar.gz',
-            'https://github.com/getsentry/sentry-native/archive/refs/tags/0.4.10.tar.gz'],
-        )
-        if ret: conf.fatal('curl error %i'%ret)
-        print('Extract sentry ...')
-        ret = conf.exec_command(['tar','-zxvf','dependencies/sentry.tar.gz','-C','dependencies'])
-        if ret: conf.fatal('tar error %i'%ret)
-        print('Download breakpad ...')
-        ret = conf.exec_command(
-            ['git','clone','https://chromium.googlesource.com/breakpad/breakpad.git','dependencies/breakpad'])
-        if ret: conf.fatal('git error %i'%ret)
-        print('Copy breakpad to sentry ...')
-        ret = conf.exec_command(['cp','-r','dependencies/breakpad/src/','dependencies/sentry-native-0.4.10/external/breakpad'])
-        if ret: conf.fatal('cp error %i'%ret)
-        print('Download lss ...')
-        ret = conf.exec_command(['git','clone','https://chromium.googlesource.com/linux-syscall-support','dependencies/sentry-native-0.4.10/external/breakpad/src/third_party/lss'])
-        if ret: conf.fatal('git error %i'%ret)
-        print('Clean unused files ...')
-        conf.path.find_node('dependencies/sentry.tar.gz').delete()
-        conf.path.find_node('dependencies/breakpad').delete()
     build_dir = conf.path.make_node(out+'/sentry')
     if not build_dir.exists():
         build_dir.mkdir()
         print('Run cmake...')
-        ret = conf.exec_command('cmake -B {} -Sdependencies/sentry-native-0.4.10'.format(build_dir.abspath()))
+        cmdline = 'cmake -B {} -Sdependencies/sentry -DSENTRY_BUILD_TESTS=OFF -DSENTRY_BUILD_EXAMPLES=OFF'.format(build_dir.abspath())
+        if toolchain: cmdline += ' -DCMAKE_TOOLCHAIN_FILE={}'.format(toolchain)
+        ret = conf.exec_command(cmdline)
         if ret: conf.fatal('cmake error %i'%ret)
         print('Run make...')
         ret = conf.exec_command(['make','-C',build_dir.abspath()])
@@ -128,6 +112,77 @@ def dockerize(conf):
     executable_path = conf.options.prefix + '/bin/uav-router'
     ret = conf.exec_command(['dockerize', '--output-dir', output.abspath(), '-n', '-e', executable_path, executable_path])
     if ret: conf.fatal('dockerize error %i'%ret)
+
+def image(conf):
+    output = conf.path.find_node(out)
+    app_node = output.find_node('uav-router')
+    if app_node is None:
+        conf.fatal('no uav-router exists')
+    cout = conf.cmd_and_log(['readelf', '-h', app_node.abspath()])
+    elf_hdr = {}
+    for line in cout.splitlines():
+        k,v = line.split(':')
+        elf_hdr[k.strip()] = v.strip()
+    print(elf_hdr['Machine'])#ARM,Advanced Micro Devices X86-64,AArch64
+    arch_params = {
+        'ARM':{
+            'libs_list':'docker/stdlibs/lib-arm32.txt',
+            'libs_dir_input':'/sysroot/arm32/lib/',
+            'libs_dir_output':'sysroot/lib'
+        },
+        'Advanced Micro Devices X86-64':{
+            'libs_list':'docker/stdlibs/lib-x86.txt',
+            'libs_dir_input':'/lib64/',
+            'libs_dir_output':'sysroot/lib64'
+        },
+        'AArch64':{
+            'libs_list':'docker/stdlibs/lib-arm64.txt',
+            'libs_dir_input':'/sysroot/arm64/lib64/',
+            'libs_dir_output':'sysroot/lib64'
+        }
+    }
+    params = arch_params[elf_hdr['Machine']]
+    
+    #copy template
+    image_dir = conf.path.make_node('docker_image')
+    if image_dir.exists():
+        print('delete image directory {}'.format(image_dir.abspath()))
+        image_dir.delete()
+    input = conf.path.find_node('docker/cross/docker_image')
+    ret = conf.exec_command(['cp', '-r', input.abspath(), conf.path.abspath()])
+    if ret: conf.fatal('copy image template error %i'%ret)
+    sysroot = image_dir.make_node('sysroot')
+
+    #copy sentry.so
+    sentry_so = output.find_node('deps_install/usr/local/lib/libsentry.so')
+    if sentry_so is None:
+        sentry_so = output.find_node('deps_install/usr/local/lib64/libsentry.so')
+    if sentry_so is None:
+        conf.fatal('no sentry.so exists')
+    libs_dir = image_dir.make_node(params['libs_dir_output'])
+    if not libs_dir.exists():
+        libs_dir.mkdir()
+    ret = conf.exec_command(['cp', sentry_so.abspath(), libs_dir.abspath()])
+    if ret: conf.fatal('copy sentry.so error %i'%ret)
+
+    #copy application
+    ret = conf.exec_command(['mkdir', '-p', sysroot.abspath()+'/usr/bin'])
+    if ret: conf.fatal('mkdir for app error %i'%ret)
+    ret = conf.exec_command(['cp', app_node.abspath(), sysroot.find_node('usr/bin').abspath()])
+    if ret: conf.fatal('copy uav-router error %i'%ret)
+
+    #copy .so dependencies
+    source_libs_dir = params['libs_dir_input']
+    for lib_name in conf.path.find_node(params['libs_list']).read().splitlines():
+        ret = conf.exec_command(['cp', '-L', source_libs_dir+lib_name, libs_dir.abspath()])
+        if ret: conf.fatal('copy uav-router error %i'%ret)
+
+    if elf_hdr['Machine']=='AArch64':
+        lib = sysroot.make_node('lib')
+        lib.mkdir()
+        ret = conf.exec_command(['ln', '-s', "../lib64/ld-linux-aarch64.so.1", lib.abspath()])
+        if ret: conf.fatal('copy uav-router error %i'%ret)
+
 
 def build(bld):
     print('sentry\t- %r' % bld.env.SENTRY)
@@ -212,7 +267,8 @@ def build(bld):
         print('uav-router is built with yamp-cpp dependency only')
 
 # cross build
-# cp sysroot/fedora-arm64/usr/lib64/clang/12.0.1/lib/libclang_rt.* /usr/lib64/clang/12.0.1/lib/linux/
-# cp sysroot/fedora-arm32/usr/lib/clang/12.0.1/lib/libclang_rt.* /usr/lib64/clang/12.0.1/lib/linux/
 # clang++ --target=arm-linux-gnueabihf --rtlib=compiler-rt --sysroot=sysroot/fedora-arm32 -fuse-ld=lld hello.cpp -o hello
 # clang++ --target=aarch64-linux-gnu --rtlib=compiler-rt --sysroot=sysroot/fedora-arm64 -fuse-ld=lld hello.cpp -o hello
+# cmake -DSENTRY_BUILD_TESTS=OFF -DSENTRY_BUILD_EXAMPLES=OFF -DCMAKE_TOOLCHAIN_FILE=../arm64.toolchain ../../../dependencies/sentry-native-0.4.10/
+# cmake -DCMAKE_TOOLCHAIN_FILE=../arm64.toolchain -DYAML_CPP_BUILD_TESTS=OFF ../../../dependencies/yaml-cpp/
+# waf configure --clangxx-target-triple=arm-linux-gnueabihf --clangxx-sysroot=/sysroot/arm32/

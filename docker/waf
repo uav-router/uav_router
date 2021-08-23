@@ -31,4 +31,4 @@ case $arch in
         exit 1
         ;;
 esac
-docker run --platform=$platform --rm -e WAFLOCK=".lock-waf_linux_build-$arch" --user $(id -u):$(id -g) -v $(pwd):/uav-router uav-router_builder:$arch "$@"
+docker run --platform=$platform --rm --user $(id -u):$(id -g) -v $(pwd):/uav-router uav-router_builder:$arch "$@"
