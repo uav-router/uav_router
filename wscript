@@ -174,8 +174,12 @@ def image(conf):
     #copy .so dependencies
     source_libs_dir = params['libs_dir_input']
     for lib_name in conf.path.find_node(params['libs_list']).read().splitlines():
+        if lib_name.startswith('?'):
+            lib_name=lib_name[1:]
+            required=False
+        else: required=True
         ret = conf.exec_command(['cp', '-L', source_libs_dir+lib_name, libs_dir.abspath()])
-        if ret: conf.fatal('copy uav-router error %i'%ret)
+        if ret and required: conf.fatal('copy uav-router error %i'%ret)
 
     if elf_hdr['Machine']=='AArch64':
         lib = sysroot.make_node('lib')

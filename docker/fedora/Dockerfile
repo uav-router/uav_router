@@ -10,5 +10,4 @@ WORKDIR /uav-router
 ENTRYPOINT ["waf"]
 CMD [ "--help" ]
 ARG WAFLOCK
-RUN echo "WAFLOCK is ${WAFLOCK}"
 ENV WAFLOCK="${WAFLOCK}"

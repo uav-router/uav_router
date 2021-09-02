@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+set -e
+script_dir=$(dirname "$(readlink -f $0)")
+cd $script_dir/../..
+#docker run --rm -it --user $(id -u):$(id -g) -v $(pwd):/uav-router --entrypoint=bash uav-router_crossbuild:amd64
+docker run --rm -it -v $(pwd):/uav-router --entrypoint=bash uav-router_crossbuild:amd64

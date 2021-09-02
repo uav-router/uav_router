@@ -1,10 +1,9 @@
 ARG BASE_IMAGE
-ARG WAFLOCK
 FROM $BASE_IMAGE
 ENV TZ=UTC
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl clang build-essential libudev-dev cmake python3 python3-pip libavahi-client-dev libavahi-core-dev git rsync libcurl4-openssl-dev \
+    curl clang llvm lld build-essential libudev-dev cmake python3 python3-pip libavahi-client-dev libavahi-core-dev git rsync libcurl4-openssl-dev \
     && rm -rf /var/lib/apt/lists/*
 RUN update-alternatives --install /usr/bin/python python /usr/bin/python3 1
 RUN curl --insecure -o waf.tar.bz2 https://waf.io/waf-2.0.22.tar.bz2 && \
@@ -21,4 +20,5 @@ VOLUME /uav-router
 WORKDIR /uav-router
 ENTRYPOINT ["waf"]
 CMD [ "--help" ]
+ARG WAFLOCK
 ENV WAFLOCK="$WAFLOCK"

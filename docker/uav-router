@@ -15,4 +15,4 @@ docker run  -v /var/run/dbus:/var/run/dbus \
             -v $1:/etc/config.yml \
             -it --rm \
             --init \
-            uav-router:$arch /etc/config.yml
+            uav-router${2}:$arch /etc/config.yml
